@@ -10,7 +10,7 @@ import zipfile
 from datetime import datetime
 import base64
 from clipboard_component import copy_component, paste_component
-
+import docx
 # Configure the page
 st.set_page_config(
     page_title="PowerPoint AI Field Filler",
@@ -410,21 +410,18 @@ def create_download_link(data, filename):
     return href
 
 def main():
-    # --- NEW: Banners at the very top ---
+    # Banners at the very top
     st.warning('**DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM**')
-    
-    # CORRECTED CODE
     try:
         st.image("banner.png", use_container_width=True)
     except Exception as e:
-    # This will prevent the app from crashing if the banner.png is not found
         st.info("Info: `banner.png` not found. Skipping image banner.")
 
     # Header
-    st.markdown('<div class="main-header">📊 PowerPoint AI Field Filler</div>', unsafe_allow_html=True)
-    
-    st.markdown("**Transform your PowerPoint templates with AI-powered data filling!**")
+    st.markdown('<div class="main-header">📊 Document AI Field Filler</div>', unsafe_allow_html=True)
+    st.markdown("**Transform your templates with AI-powered data filling!**")
 
+    # Initialize session state
     if 'fields' not in st.session_state:
         st.session_state.fields = []
     if 'field_locations' not in st.session_state:
@@ -432,42 +429,29 @@ def main():
     if 'ai_prompt' not in st.session_state:
         st.session_state.ai_prompt = ""
 
-    # --- MODIFIED: Step 1 ---
+    # Step 1: Template Upload
     st.markdown('<div class="step-container">', unsafe_allow_html=True)
-    st.markdown("### 📁 Step 1: Choose Your PowerPoint Template")
+    st.markdown("### 📁 Step 1: Choose Your Template")
     
-    template_choice = st.radio(
-        "Select a template source:",
-        ('Use the One-Pager template', 'Upload your own template'),
-        horizontal=True,
-        label_visibility="collapsed"
+    uploaded_file = st.file_uploader(
+        "Choose your template file",
+        type=['pptx', 'docx'],
+        help="Upload a PowerPoint or Word file with {{field_name}} placeholders."
     )
-
-    uploaded_file = None
-    
-    if template_choice == 'Upload your own template':
-        uploaded_file = st.file_uploader(
-            "Choose your PowerPoint template with {{field_name}} placeholders",
-            type=['pptx'],
-            help="Upload a PowerPoint file containing placeholders like {{project_title}}, {{commander_name}}, etc."
-        )
-    else:
-        try:
-            with open("onepager_template.pptx", "rb") as f:
-                uploaded_file = io.BytesIO(f.read())
-            st.success("✅ Loaded the built-in 'One-Pager' template.")
-        except FileNotFoundError:
-            st.error("Error: `onepager_template.pptx` not found in the repository. Please ask the app administrator to upload it.")
-    
     st.markdown('</div>', unsafe_allow_html=True)
-    
+
     if uploaded_file is not None:
-        with st.spinner('🔍 Analyzing PowerPoint fields...'):
-            # When using the local file, we give it a name attribute for consistency
-            if not hasattr(uploaded_file, 'name'):
-                 uploaded_file.name = "onepager_template.pptx"
-            st.session_state.fields, st.session_state.field_locations = analyze_powerpoint_fields(uploaded_file)
-        
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+
+        with st.spinner('🔍 Analyzing template fields...'):
+            if file_extension == 'pptx':
+                st.session_state.fields, st.session_state.field_locations = analyze_powerpoint_fields(uploaded_file)
+            elif file_extension == 'docx':
+                st.session_state.fields, st.session_state.field_locations = analyze_word_fields(uploaded_file)
+            else:
+                st.error("Unsupported file type. Please upload a .pptx or .docx file.")
+                return
+
         if st.session_state.fields:
             st.markdown('<div class="success-box">', unsafe_allow_html=True)
             st.success(f"Found {len(st.session_state.fields)} placeholders in '{uploaded_file.name}'!")
@@ -478,16 +462,14 @@ def main():
                     st.write("**Found Fields:**")
                     for field in sorted(st.session_state.fields):
                         st.write(f"• `{{{{{field}}}}}`")
-                
                 with col2:
                     st.write("**Field Locations (first 5):**")
                     for loc in st.session_state.field_locations[:5]:
                         st.write(f"• `{{{{{loc['field']}}}}}` on Slide {loc['slide']}")
                     if len(st.session_state.field_locations) > 5:
                         st.write(f"... and {len(st.session_state.field_locations) - 5} more")
-            
             st.markdown('</div>', unsafe_allow_html=True)
-            
+
             # Step 2: Project Data Input
             st.markdown('<div class="step-container">', unsafe_allow_html=True)
             st.markdown("### 📝 Step 2: Enter Your Project Data")
@@ -495,23 +477,19 @@ def main():
             project_data = st.text_area(
                 "Paste your raw project data here:",
                 height=200,
-                placeholder="Enter your project details, requirements, team information, etc. The AI will extract relevant information for each field."
+                placeholder="Enter your project details, requirements, team information, etc."
             )
             
-            # Image upload section
-            st.markdown("**Product Image (Optional):**")
             uploaded_image = st.file_uploader(
-                "Choose an image file",
-                type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
-                help="This will replace images in your PowerPoint that have alt text like {{project_image}}"
+                "Choose an image file (for PowerPoint only)",
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp']
             )
             
             if uploaded_image:
                 st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
-                st.info("💡 **Tip:** In PowerPoint, right-click any image → Edit Alt Text → Add description like `{{project_image}}` to replace it with this uploaded image")
-            
+
             st.markdown('</div>', unsafe_allow_html=True)
-            
+
             if project_data.strip():
                 if st.button("🤖 Generate AI Prompt", type="primary"):
                     st.session_state.ai_prompt = generate_ai_prompt(st.session_state.fields, project_data)
@@ -520,96 +498,75 @@ def main():
                     # Step 3: AI Prompt
                     st.markdown('<div class="step-container">', unsafe_allow_html=True)
                     st.markdown("### 📋 Step 3: Copy Prompt to AI")
-                    
                     st.info("Copy this prompt and paste it into your preferred AI assistant.")
                     
-                    # Display the prompt in an expandable section
                     with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
                         st.code(st.session_state.ai_prompt, language="text")
                     
-                    # CORRECT LINE
                     copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
 
-                    # --- MODIFIED: AI Service Button ---
                     st.markdown("**Quick Link to AI Service:**")
                     st.markdown(
                         f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>',
                         unsafe_allow_html=True
                     )
-                    
                     st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Step 4: AI Response
+
+                    # Step 4: AI Response & Document Generation
                     st.markdown('<div class="step-container">', unsafe_allow_html=True)
-                    st.markdown("### 🔄 Step 4: Paste AI Response")
+                    st.markdown("### 🔄 Step 4: Paste AI Response & Generate")
                     
                     ai_response = st.text_area(
                         "Paste the AI's JSON response here:",
                         height=150,
-                        placeholder='{"project_title": "Your Project", "commander_name": "John Doe", ...}'
+                        placeholder='{"project_title": "Your Project", ...}'
                     )
-                    
+
                     if ai_response.strip():
                         try:
-                            # Validate JSON
                             json_str_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
                             if not json_str_match:
                                 raise json.JSONDecodeError("No JSON object found in the response.", ai_response, 0)
-                            
                             json_data = json.loads(json_str_match.group(0))
-                            
                             st.success("✅ Valid JSON detected!")
-                            
-                            # Show preview of data
-                            with st.expander("👀 Preview Data"):
-                                st.json(json_data)
-                            
-                            if st.button("🚀 Generate Filled PowerPoint", type="primary"):
+
+                            if st.button("🚀 Generate Filled Document", type="primary"):
                                 progress_container = st.container()
-                                
-                                with st.spinner('🔄 Filling PowerPoint template...'):
-                                    # Reset file pointer
+                                with st.spinner('🔄 Filling template...'):
                                     uploaded_file.seek(0)
-                                    prs = Presentation(uploaded_file)
-                                    
-                                    # Fill the PowerPoint
-                                    filled_prs, replacements = fill_powerpoint_with_data(
-                                        prs, json_data, uploaded_image, progress_container
-                                    )
-                                    
-                                    if filled_prs:
-                                        # Save to bytes
-                                        output_buffer = io.BytesIO()
-                                        filled_prs.save(output_buffer)
-                                        output_buffer.seek(0)
-                                        
-                                        # Generate filename
-                                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    output_buffer = io.BytesIO()
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                                    if file_extension == 'pptx':
+                                        prs = Presentation(uploaded_file)
+                                        filled_doc, replacements = fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container)
+                                        filled_doc.save(output_buffer)
                                         filename = f"filled_presentation_{timestamp}.pptx"
-                                        
-                                        st.success(f"✅ PowerPoint generated successfully! ({replacements} replacements made)")
-                                        
-                                        # Download button
-                                        st.download_button(
-                                            label="📥 Download Filled PowerPoint",
-                                            data=output_buffer.getvalue(),
-                                            file_name=filename,
-                                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                                        )
-                                        
-                                        st.balloons()  # Celebration animation!
+                                        mime_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                    elif file_extension == 'docx':
+                                        filled_doc = fill_word_with_data(uploaded_file, json_data)
+                                        filled_doc.save(output_buffer)
+                                        filename = f"filled_document_{timestamp}.docx"
+                                        mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    
+                                    progress_container.success(f"✅ Document generated successfully!")
+                                    st.download_button(
+                                        label=f"📥 Download Filled {file_extension.upper()}",
+                                        data=output_buffer.getvalue(),
+                                        file_name=filename,
+                                        mime=mime_type
+                                    )
+                                    st.balloons()
                         
                         except json.JSONDecodeError as e:
                             st.error(f"❌ Invalid JSON format in the AI response: {str(e)}")
                             st.info("💡 Please ensure you paste the entire, unmodified JSON object from the AI.")
-                    
                     st.markdown('</div>', unsafe_allow_html=True)
-        
-        elif uploaded_file is not None: # This check prevents the message from showing before analysis
+
+        elif uploaded_file is not None:
             st.markdown('<div class="warning-box">', unsafe_allow_html=True)
-            st.warning("⚠️ No {{field_name}} placeholders found in your PowerPoint!")
-            st.write("Make sure your PowerPoint contains placeholders like:")
-            st.code("{{project_title}}, {{commander_name}}, {{problem_description}}")
+            st.warning("⚠️ No {{field_name}} placeholders found in your template!")
+            st.write("Make sure your template contains placeholders like: `{{project_title}}`")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # Footer
@@ -617,12 +574,12 @@ def main():
     st.markdown("""
     <div style="text-align: center; color: #666; padding: 20px;">
         <p>🚀 Built for NIPR environments • No local installation required • Works in any browser</p>
-        <p>💡 <strong>How to use:</strong> Upload PowerPoint → Add project data → Get AI response → Download filled presentation</p>
     </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
 
 
 
