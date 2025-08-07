@@ -33,8 +33,8 @@ st.set_page_config(
 def load_prompt_config():
     """Load prompt configuration from text file"""
     config_file = "prompt_config.txt"
-    # Emergency fallback prompt (only used if file doesn't exist or is completely broken)
-    emergency_fallback_prompt = """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
+    default_config = {
+        "default_prompt": """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
 **Document Fields to Fill:**
 
 {field_list}
@@ -53,62 +53,54 @@ def load_prompt_config():
 
 {project_data}
 
-Please analyze the above data and return the JSON object with field values"""
-    
-    emergency_config = {
-        "default_prompt": emergency_fallback_prompt,
+Please analyze the above data and return the JSON object with field values""",
         "template_prompts": {}
     }
     
     try:
-        # Debug: Show current working directory and file existence (commented out)
-        # current_dir = os.getcwd()
-        # file_exists = os.path.exists(config_file)
-        # file_path = os.path.abspath(config_file)
-        # st.info(f"Debug: Current directory: {current_dir}")
-        # st.info(f"Debug: Looking for file: {file_path}")
-        # st.info(f"Debug: File exists: {file_exists}")
+        # Debug: Show current working directory and file existence
+        current_dir = os.getcwd()
+        file_exists = os.path.exists(config_file)
+        file_path = os.path.abspath(config_file)
         
-        # List files in current directory for debugging (commented out)
-        # try:
-        #     files_in_dir = os.listdir('.')
-        #     config_files = [f for f in files_in_dir if 'config' in f.lower()]
-        #     st.info(f"Debug: Config-related files found: {config_files}")
-        # except:
-        #     pass
+        st.info(f"Debug: Current directory: {current_dir}")
+        st.info(f"Debug: Looking for file: {file_path}")
+        st.info(f"Debug: File exists: {file_exists}")
         
-        if os.path.exists(config_file):
+        # List files in current directory for debugging
+        try:
+            files_in_dir = os.listdir('.')
+            config_files = [f for f in files_in_dir if 'config' in f.lower()]
+            st.info(f"Debug: Config-related files found: {config_files}")
+        except:
+            pass
+        
+        if file_exists:
             with open(config_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 
             st.success(f"Successfully read {config_file} ({len(content)} characters)")
                 
             if not content:
-                st.warning("prompt_config.txt is empty. Using emergency fallback prompt.")
-                return emergency_config
+                st.warning("prompt_config.txt is empty. Using default prompt.")
+                return default_config
                 
             # Parse the text file format
-            config = {"template_prompts": {}, "default_prompt": emergency_fallback_prompt}
+            config = {"template_prompts": {}, "default_prompt": default_config["default_prompt"]}
             
             # Split by template sections
             sections = content.split("---TEMPLATE:")
             
             # First section before any template is the default prompt (if it exists)
-            if sections[0].strip():
+            if sections[0].strip() and not sections[0].startswith("TEMPLATE:"):
                 first_section = sections[0].strip()
                 if first_section.startswith("DEFAULT_PROMPT:"):
-                    # Extract default prompt from file
                     config["default_prompt"] = first_section.replace("DEFAULT_PROMPT:", "").strip()
-                    st.info("✅ Using DEFAULT_PROMPT from prompt_config.txt")
-                else:
-                    # If first section doesn't have prefix, treat entire first section as default
+                elif not first_section.startswith("TEMPLATE:"):
+                    # If first section doesn't have any prefix, it's the default
                     config["default_prompt"] = first_section
-                    st.info("✅ Using first section as default prompt from prompt_config.txt")
-            else:
-                st.warning("No default prompt found in config file. Using emergency fallback.")
             
             # Process template-specific prompts
-            template_count = 0
             for section in sections[1:]:  # Skip first section
                 if section.strip():
                     lines = section.strip().split('\n', 1)
@@ -116,23 +108,18 @@ Please analyze the above data and return the JSON object with field values"""
                         template_name = lines[0].strip()
                         template_prompt = lines[1].strip()
                         config["template_prompts"][template_name] = template_prompt
-                        template_count += 1
-                        st.success(f"✅ Loaded custom prompt for: {template_name}")
+                        st.success(f"Loaded custom prompt for: {template_name}")
             
-            if template_count > 0:
-                st.info(f"Successfully loaded {template_count} template-specific prompts from {config_file}")
-            else:
-                st.info("No template-specific prompts found in config file.")
-            
+            st.info(f"Successfully loaded prompt configuration from {config_file}")
             return config
         else:
-            st.warning(f"Could not find {config_file}. Using emergency fallback prompt.")
-            return emergency_config
+            st.warning(f"Could not find {config_file}. Using default prompt.")
+            return default_config
             
     except Exception as e:
         st.error(f"Error reading prompt config file: {e}")
-        st.warning("Using emergency fallback prompt instead.")
-        return emergency_config
+        st.info("Using default prompt instead.")
+        return default_config
 
 def get_template_prompt(template_name, prompt_config):
     """Get the appropriate prompt for a template"""
