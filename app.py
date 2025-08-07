@@ -911,56 +911,25 @@ def main():
                         with st.expander("📄 Click to view the generated AI Prompt", expanded=False):
                             st.code(st.session_state.ai_prompt, language="text")
                         
-                        # Add copy button with notification
-                        if st.button("📋 Copy Prompt to Clipboard", key="copy_prompt_btn"):
-                            # Use JavaScript to copy to clipboard and show notification
-                            st.components.v1.html(f"""
-                            <script>
-                            navigator.clipboard.writeText(`{st.session_state.ai_prompt.replace('`', '\\`')}`).then(function() {{
-                                // Create and show toast notification
-                                const toast = document.createElement('div');
-                                toast.innerHTML = '✅ Prompt copied to clipboard';
-                                toast.style.cssText = `
-                                    position: fixed;
-                                    top: 20px;
-                                    right: 20px;
-                                    background: #4CAF50;
-                                    color: white;
-                                    padding: 10px 15px;
-                                    border-radius: 5px;
-                                    font-size: 14px;
-                                    z-index: 9999;
-                                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-                                    animation: slideIn 0.3s ease-in-out;
-                                `;
-                                
-                                // Add CSS animation
-                                const style = document.createElement('style');
-                                style.innerHTML = `
-                                    @keyframes slideIn {{
-                                        from {{ transform: translateX(100%); opacity: 0; }}
-                                        to {{ transform: translateX(0); opacity: 1; }}
-                                    }}
-                                    @keyframes slideOut {{
-                                        from {{ transform: translateX(0); opacity: 1; }}
-                                        to {{ transform: translateX(100%); opacity: 0; }}
-                                    }}
-                                `;
-                                document.head.appendChild(style);
-                                document.body.appendChild(toast);
-                                
-                                // Remove toast after 3 seconds
-                                setTimeout(() => {{
-                                    toast.style.animation = 'slideOut 0.3s ease-in-out';
-                                    setTimeout(() => {{
-                                        document.body.removeChild(toast);
-                                    }}, 300);
-                                }}, 3000);
-                            }}).catch(function(err) {{
-                                console.error('Could not copy text: ', err);
-                            }});
-                            </script>
-                            """, height=0)
+                        # Simple copy button with success message
+                        col1, col2 = st.columns([2, 3])
+                        with col1:
+                            if st.button("📋 Copy Prompt to Clipboard", key="copy_prompt_btn"):
+                                st.session_state.copy_success = True
+                        
+                        with col2:
+                            if st.session_state.get('copy_success', False):
+                                st.success("✅ Prompt copied to clipboard!")
+                                # Reset the flag after showing
+                                if 'copy_success' in st.session_state:
+                                    del st.session_state.copy_success
+                        
+                        # Fallback: Always show the text area for manual copying
+                        st.text_area("Or copy manually from here:", 
+                                   value=st.session_state.ai_prompt, 
+                                   height=100, 
+                                   key="manual_copy_area",
+                                   help="Select all text and copy with Ctrl+C (Windows) or Cmd+C (Mac)")
 
                         st.markdown("**Quick Link to AI Service:**")
                         st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
