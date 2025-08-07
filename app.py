@@ -119,18 +119,20 @@ def analyze_powerpoint_fields(uploaded_file):
         return [], []
 
 def analyze_word_fields(uploaded_file):
-    """(Corrected) Analyze a Word document for field placeholders."""
+    """(FIXED) Analyze a Word document for field placeholders including text boxes."""
     try:
         doc = docx.Document(uploaded_file)
         found_fields = set()
         field_pattern = r'\{\{([^}]+)\}\}'
 
+        # Check regular paragraphs
         for para in doc.paragraphs:
             if para.text:
                 matches = re.findall(field_pattern, para.text)
                 for field in matches:
                     found_fields.add(field)
 
+        # Check tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -139,8 +141,52 @@ def analyze_word_fields(uploaded_file):
                             matches = re.findall(field_pattern, para.text)
                             for field in matches:
                                 found_fields.add(field)
+
+        # Check text boxes and shapes (NEW CODE)
+        # Access the document's XML to find text boxes
+        from docx.oxml import parse_xml
+        from docx.oxml.ns import nsdecls, qn
+        
+        # Get all drawing elements that might contain text boxes
+        for element in doc.element.xpath('//w:drawing'):
+            # Look for text content in drawing elements
+            for txbx in element.xpath('.//w:txbxContent', namespaces=doc.element.nsmap):
+                # Get all paragraphs within the text box
+                for para_elem in txbx.xpath('.//w:p', namespaces=doc.element.nsmap):
+                    # Extract text from the paragraph
+                    text_content = ""
+                    for t_elem in para_elem.xpath('.//w:t', namespaces=doc.element.nsmap):
+                        if t_elem.text:
+                            text_content += t_elem.text
+                    
+                    if text_content:
+                        matches = re.findall(field_pattern, text_content)
+                        for field in matches:
+                            found_fields.add(field)
+
+        # Alternative approach: check headers and footers which might contain text boxes
+        for section in doc.sections:
+            # Check headers
+            if section.header:
+                for para in section.header.paragraphs:
+                    if para.text:
+                        matches = re.findall(field_pattern, para.text)
+                        for field in matches:
+                            found_fields.add(field)
+            
+            # Check footers  
+            if section.footer:
+                for para in section.footer.paragraphs:
+                    if para.text:
+                        matches = re.findall(field_pattern, para.text)
+                        for field in matches:
+                            found_fields.add(field)
         
         return list(found_fields), []
+        
+    except Exception as e:
+        st.error(f"Error analyzing Word document: {e}")
+        return [], []]
         
     except Exception as e:
         st.error(f"Error analyzing Word document: {e}")
@@ -237,12 +283,16 @@ def fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container
     return prs, replacements_made
 
 def fill_word_with_data(doc_file, data):
-    """Fill a Word document with data, preserving formatting."""
+    """(FIXED) Fill a Word document with data, preserving formatting and handling text boxes."""
     doc = docx.Document(doc_file)
+    
+    # Fill regular paragraphs
     for paragraph in doc.paragraphs:
         for field, value in data.items():
             placeholder = f"{{{{{field}}}}}"
             replace_text_in_paragraph(paragraph, placeholder, str(value))
+    
+    # Fill tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -250,6 +300,54 @@ def fill_word_with_data(doc_file, data):
                     for field, value in data.items():
                         placeholder = f"{{{{{field}}}}}"
                         replace_text_in_paragraph(paragraph, placeholder, str(value))
+    
+    # Fill text boxes (NEW CODE)
+    try:
+        # Access the document's XML to find and modify text boxes
+        for element in doc.element.xpath('//w:drawing'):
+            for txbx in element.xpath('.//w:txbxContent', namespaces=doc.element.nsmap):
+                for para_elem in txbx.xpath('.//w:p', namespaces=doc.element.nsmap):
+                    # Get all text elements in this paragraph
+                    text_elements = para_elem.xpath('.//w:t', namespaces=doc.element.nsmap)
+                    
+                    # Combine all text to check for placeholders
+                    full_text = "".join([t.text or "" for t in text_elements])
+                    
+                    # Replace placeholders in the combined text
+                    modified_text = full_text
+                    for field, value in data.items():
+                        placeholder = f"{{{{{field}}}}}"
+                        modified_text = modified_text.replace(placeholder, str(value))
+                    
+                    # If text was modified, update the first text element and clear others
+                    if modified_text != full_text and text_elements:
+                        text_elements[0].text = modified_text
+                        for t_elem in text_elements[1:]:
+                            t_elem.text = ""
+    
+    except Exception as e:
+        st.error(f"Error filling text boxes: {e}")
+    
+    # Fill headers and footers
+    try:
+        for section in doc.sections:
+            # Fill headers
+            if section.header:
+                for paragraph in section.header.paragraphs:
+                    for field, value in data.items():
+                        placeholder = f"{{{{{field}}}}}"
+                        replace_text_in_paragraph(paragraph, placeholder, str(value))
+            
+            # Fill footers
+            if section.footer:
+                for paragraph in section.footer.paragraphs:
+                    for field, value in data.items():
+                        placeholder = f"{{{{{field}}}}}"
+                        replace_text_in_paragraph(paragraph, placeholder, str(value))
+    
+    except Exception as e:
+        st.error(f"Error filling headers/footers: {e}")
+    
     return doc
 
 # --- Main Application Logic ---
@@ -410,5 +508,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
