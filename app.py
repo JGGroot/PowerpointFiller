@@ -484,8 +484,8 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="step-container">', unsafe_allow_html=True)
-            st.markdown("### 📝 Step 2: Enter Your Project Data")
-            project_data = st.text_area("Paste your raw project data here:", height=200)
+            st.markdown("### 📝 Step 2: Enter Your Applicable Data Or Text. This can be formatted in any way, stream of thought, lists, sentences, etc. The more you provide the better your result will be. Any field on your template that is not covered will be "TBD"")
+            project_data = st.text_area("Enter your data here:", height=200)
             
             uploaded_image = None
             if file_extension == 'pptx':
@@ -571,6 +571,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
