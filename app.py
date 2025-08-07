@@ -31,7 +31,13 @@ st.set_page_config(
 # Load prompt configuration (no caching to allow real-time updates)
 def load_prompt_config():
     """Load prompt configuration from JSON file"""
-    config_file = "prompt_config.json"
+    
+    # --- START of CHANGE ---
+    
+    # Get the absolute path to the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Join that directory path with the config file name
+    config_file = os.path.join(script_dir, "prompt_config.json")
     # Emergency fallback prompt (only used if file doesn't exist or is completely broken)
     emergency_fallback_prompt = """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
 **Document Fields to Fill:**
@@ -1212,3 +1218,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
