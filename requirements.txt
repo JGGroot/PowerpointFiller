@@ -7,3 +7,4 @@ python-docx
 PyMuPDF
 PyPDF2
 reportlab
+pycryptodome
