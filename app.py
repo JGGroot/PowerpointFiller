@@ -70,6 +70,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Google Analytics - Replace 'G-HMVVJJ6C17' with your actual Google Analytics ID
+st.markdown("""
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-HMVVJJ6C17"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-HMVVJJ6C17');
+</script>
+""", unsafe_allow_html=True)
+
 # --- Analysis Functions ---
 
 def analyze_powerpoint_fields(uploaded_file):
