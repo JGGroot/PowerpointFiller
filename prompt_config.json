@@ -1,6 +1,0 @@
-{
-  "template_prompts": {
-    "MFR Template.docx": "This is a test {field_list} {project_data}",
-    "military_brief.pptx": "Military briefing focus. Extract mission data, personnel info, and operational details. {field_list} {project_data}"
-  }
-}
