@@ -285,9 +285,10 @@ def replace_text_in_paragraph(paragraph, key, value):
 def fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container):
     """(CORRECTED) Fill PowerPoint with data preserving formatting."""
     replacements_made = 0
-    if uploaded_image:
-        # Placeholder for image replacement logic
-        pass
+    # Image replacement functionality temporarily disabled
+    # if uploaded_image:
+    #     # Placeholder for image replacement logic
+    #     pass
 
     for slide in prs.slides:
         for shape in slide.shapes:
@@ -493,11 +494,12 @@ def main():
                 st.markdown("### 📝 Step 2: Enter Your Applicable Data Or Text. This can be formatted in any way, stream of thought, lists, sentences, etc. The more you provide the better your result will be. Any field on your template that is not covered will be TBD")
                 project_data = st.text_area("Enter your data here:", height=200)
                 
+                # Image upload temporarily disabled
                 uploaded_image = None
-                if file_extension == 'pptx':
-                    uploaded_image = st.file_uploader("Choose an image file (for PowerPoint only)", type=['png', 'jpg', 'jpeg'])
-                    if uploaded_image:
-                        st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
+                # if file_extension == 'pptx':
+                #     uploaded_image = st.file_uploader("Choose an image file (for PowerPoint only)", type=['png', 'jpg', 'jpeg'])
+                #     if uploaded_image:
+                #         st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
