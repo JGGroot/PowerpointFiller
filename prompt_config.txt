@@ -26,7 +26,7 @@ Focus on financial data and quarterly metrics. Extract budget figures, revenue, 
 **Data:** {project_data}
 Emphasize financial terminology and quarterly comparisons.
 
----TEMPLATE:Project OnePager.pptx
+---TEMPLATE:Project_OnePager.pptx
 Military briefing format. Extract mission data, personnel info, operational details.
 **Fields:** {field_list}  
 **Project Data:** {project_data}
