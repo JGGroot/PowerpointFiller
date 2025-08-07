@@ -911,25 +911,15 @@ def main():
                         with st.expander("📄 Click to view the generated AI Prompt", expanded=False):
                             st.code(st.session_state.ai_prompt, language="text")
                         
-                        # Simple copy button with success message
-                        col1, col2 = st.columns([2, 3])
-                        with col1:
-                            if st.button("📋 Copy Prompt to Clipboard", key="copy_prompt_btn"):
-                                st.session_state.copy_success = True
+                        # Use the original working copy component with popup
+                        copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
                         
-                        with col2:
-                            if st.session_state.get('copy_success', False):
-                                st.success("✅ Prompt copied to clipboard!")
-                                # Reset the flag after showing
-                                if 'copy_success' in st.session_state:
-                                    del st.session_state.copy_success
+                        # Show a temporary success message
+                        if 'show_copy_success' not in st.session_state:
+                            st.session_state.show_copy_success = False
                         
-                        # Fallback: Always show the text area for manual copying
-                        st.text_area("Or copy manually from here:", 
-                                   value=st.session_state.ai_prompt, 
-                                   height=100, 
-                                   key="manual_copy_area",
-                                   help="Select all text and copy with Ctrl+C (Windows) or Cmd+C (Mac)")
+                        # Simple way to show feedback without breaking the copy function
+                        st.info("💡 Click the button above to copy the prompt, then paste it into your AI assistant.")
 
                         st.markdown("**Quick Link to AI Service:**")
                         st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
