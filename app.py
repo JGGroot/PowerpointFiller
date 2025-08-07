@@ -445,7 +445,7 @@ def main():
             with col2:
                 st.write("**Field Locations:**")
                 for i, loc in enumerate(st.session_state.field_locations[:5]):
-                    st.write(f"• `{{{{{loc['field']}}}}` on Slide {loc['slide']}")
+                    st.write(f"• `{{{{{loc['field']}}}}}` on Slide {loc['slide']}")
                 if len(st.session_state.field_locations) > 5:
                     st.write(f"... and {len(st.session_state.field_locations) - 5} more")
             
@@ -594,3 +594,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
