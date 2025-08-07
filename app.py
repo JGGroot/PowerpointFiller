@@ -20,6 +20,36 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import PyPDF2
 
+# --- NEW: Function to load configuration ---
+def load_prompt_config():
+    """
+    Loads and validates the prompt configuration from the JSON file.
+    This will raise an error if the file is missing or invalid.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(script_dir, "prompt_config.json")
+
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"Required configuration file not found at {config_file}")
+
+    with open(config_file, 'r', encoding='utf-8') as f:
+        config_data = json.load(f)
+
+    # Basic validation
+    if "default_prompt" not in config_data or "template_prompts" not in config_data:
+        raise KeyError("The prompt_config.json file is missing required keys: 'default_prompt' or 'template_prompts'")
+
+    return config_data
+
+# --- NEW: Load configuration at startup ---
+# This will stop the app with a clear error if the config is broken.
+try:
+    PROMPT_CONFIG = load_prompt_config()
+except Exception as e:
+    st.error(f"Fatal Error: Could not load prompt configuration. Please check 'prompt_config.json'.")
+    st.error(f"Details: {e}")
+    st.stop()
+
 # Configure the page
 st.set_page_config(
     page_title="Document AI Field Filler",
@@ -27,81 +57,6 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
-
-# Load prompt configuration (no caching to allow real-time updates)
-def load_prompt_config():
-    """Load prompt configuration from JSON file (with debugging)."""
-    print("--- 1. Attempting to load config... ---") # DEBUG
-    
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_file = os.path.join(script_dir, "prompt_config.json")
-    
-    print(f"--- 2. Looking for file at this exact path: {config_file} ---") # DEBUG
-
-    # Emergency fallback prompt
-    emergency_fallback_prompt = "..." # (keep the full prompt text here)
-    emergency_config = {
-        "default_prompt": emergency_fallback_prompt,
-        "template_prompts": {}
-    }
-    
-    try:
-        if os.path.exists(config_file):
-            print("--- 3. SUCCESS: File was found! Reading now... ---") # DEBUG
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-            print("--- 4. SUCCESS: JSON file loaded and parsed. Validating content... ---") # DEBUG
-            
-            # Validate the JSON structure
-            if not isinstance(config_data, dict):
-                print("--- ERROR: Top level of JSON is not a dictionary. ---") # DEBUG
-                return emergency_config
-                
-            # Initialize a clean config
-            config = {
-                "default_prompt": emergency_fallback_prompt,
-                "template_prompts": {}
-            }
-            
-            # Extract default_prompt from JSON
-            if "default_prompt" in config_data and config_data["default_prompt"].strip():
-                config["default_prompt"] = config_data["default_prompt"]
-                print("--- 5a. SUCCESS: Loaded 'default_prompt'. ---") # DEBUG
-            else:
-                print("--- WARNING: 'default_prompt' not found or is empty in JSON. ---") # DEBUG
-
-            # Extract template_prompts from JSON
-            if "template_prompts" in config_data and isinstance(config_data["template_prompts"], dict):
-                print("--- 5b. SUCCESS: Found 'template_prompts' dictionary. ---") # DEBUG
-                for template_name, template_prompt in config_data["template_prompts"].items():
-                    if isinstance(template_prompt, str) and template_prompt.strip():
-                        config["template_prompts"][template_name] = template_prompt
-                        print(f"    - Loaded prompt for: {template_name}") # DEBUG
-                    else:
-                        print(f"    - WARNING: Prompt for {template_name} is not a valid string or is empty.") # DEBUG
-            else:
-                print("--- WARNING: 'template_prompts' key not found or is not a dictionary. ---") # DEBUG
-            
-            return config
-            
-        else:
-            print("--- 3. FATAL ERROR: File was NOT found at the specified path. ---") # DEBUG
-            return emergency_config
-            
-    except json.JSONDecodeError as e:
-        print(f"--- 4. FATAL ERROR: The file is not valid JSON. Error: {e} ---") # DEBUG
-        return emergency_config
-        
-    except Exception as e:
-        print(f"--- An unexpected error occurred: {e} ---") # DEBUG
-        return emergency_config
-
-def get_template_prompt(template_name, prompt_config):
-    """Get the appropriate prompt for a template"""
-    if template_name and template_name in prompt_config.get("template_prompts", {}):
-        return prompt_config["template_prompts"][template_name]
-    else:
-        return prompt_config["default_prompt"]
 
 # Custom CSS for better styling
 st.markdown("""
@@ -154,7 +109,6 @@ st.markdown("""
 
 # Google Analytics - Replace 'G-HMVVJJ6C17' with your actual Google Analytics ID
 st.markdown("""
-<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-HMVVJJ6C17"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -164,8 +118,8 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
-# --- Analysis Functions ---
 
+# --- Analysis Functions (Unchanged) ---
 def analyze_pdf_fields(uploaded_file):
     """Analyze PDF file for field placeholders and form fields"""
     try:
@@ -432,19 +386,20 @@ def analyze_word_fields(uploaded_file):
         st.error(f"Error analyzing Word document: {e}")
         return [], []
 
+
 # --- Helper and Filling Functions ---
 
+# --- REFACTORED: Generate AI prompt function ---
 def generate_ai_prompt(fields, project_data, template_name=None):
-    """Generate AI prompt using template-specific or default prompt"""
-    # Load prompt configuration (no caching - reads fresh every time)
-    prompt_config = load_prompt_config()
+    """Generate AI prompt using the loaded configuration."""
     
-    # Get the appropriate prompt template
-    prompt_template = get_template_prompt(template_name, prompt_config)
+    # Use the pre-loaded PROMPT_CONFIG object.
+    # .get() provides a fallback to the default prompt if the template_name is not found.
+    prompt_template = PROMPT_CONFIG["template_prompts"].get(template_name, PROMPT_CONFIG["default_prompt"])
     
     # Prepare field list
     field_descriptions = [f"  - {field}" for field in sorted(fields)]
-    field_list = chr(10).join(field_descriptions)
+    field_list = "\n".join(field_descriptions)
     
     # Replace placeholders in the prompt template
     final_prompt = prompt_template.format(
@@ -878,8 +833,8 @@ def fill_word_with_data(doc_file, data):
     
     return doc
 
-# --- Main Application Logic ---
 
+# --- Main Application Logic ---
 def main():
     st.warning('**DO NOT ENTER CUI OR PII INTO THIS SYSTEM - FOR BETA TESTING AND NON-OFFICIAL USE ONLY**')
     try:
@@ -1211,5 +1166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
