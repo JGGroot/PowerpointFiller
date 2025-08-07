@@ -1,0 +1,17 @@
+DEFAULT_PROMPT:
+I need you to analyze project data and extract information for document fields. Return ONLY valid JSON.
+**Fields to Fill:** {field_list}
+**Data:** {project_data}
+Return JSON with field names as keys and values.
+
+---TEMPLATE:MFR Template.pptx
+Focus on financial data and quarterly metrics. Extract budget figures, revenue, performance indicators.
+**Fields:** {field_list}
+**Data:** {project_data}
+Emphasize financial terminology and quarterly comparisons.
+
+---TEMPLATE:military_brief.pptx
+Military briefing format. Extract mission data, personnel info, operational details.
+**Fields:** {field_list}  
+**Project Data:** {project_data}
+Use military terminology and focus on operational readiness.
