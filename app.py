@@ -143,25 +143,55 @@ def analyze_word_fields(uploaded_file):
                                 found_fields.add(field)
 
         # Check text boxes and shapes (NEW CODE)
-        # Access the document's XML to find text boxes
-        from docx.oxml.ns import nsdecls, qn
-        
-        # Get all drawing elements that might contain text boxes
-        for element in doc.element.xpath('//w:drawing'):
-            # Look for text content in drawing elements
-            for txbx in element.xpath('.//w:txbxContent'):
-                # Get all paragraphs within the text box
-                for para_elem in txbx.xpath('.//w:p'):
-                    # Extract text from the paragraph
-                    text_content = ""
-                    for t_elem in para_elem.xpath('.//w:t'):
+        try:
+            from docx.oxml.ns import nsdecls, qn
+            from lxml import etree
+            
+            # Define namespaces explicitly
+            namespaces = {
+                'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+                'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'
+            }
+            
+            # Get the document's XML tree
+            doc_xml = doc.element
+            
+            # Look for text boxes using various possible paths
+            textbox_paths = [
+                './/w:drawing//w:txbxContent//w:p//w:t',
+                './/w:drawing//a:txBody//a:p//a:t', 
+                './/w:object//w:drawing//w:txbxContent//w:p//w:t',
+                './/w:pict//w:textbox//w:txbxContent//w:p//w:t'
+            ]
+            
+            for path in textbox_paths:
+                try:
+                    text_elements = doc_xml.xpath(path, namespaces=namespaces)
+                    for t_elem in text_elements:
                         if t_elem.text:
-                            text_content += t_elem.text
-                    
-                    if text_content:
-                        matches = re.findall(field_pattern, text_content)
+                            matches = re.findall(field_pattern, t_elem.text)
+                            for field in matches:
+                                found_fields.add(field)
+                except Exception:
+                    # Skip this path if it doesn't work
+                    continue
+            
+            # Alternative approach: search through all text elements in the document
+            # This is a broader search that should catch text boxes regardless of structure
+            try:
+                all_text_elements = doc_xml.xpath('.//w:t', namespaces=namespaces)
+                for t_elem in all_text_elements:
+                    if t_elem.text:
+                        matches = re.findall(field_pattern, t_elem.text)
                         for field in matches:
                             found_fields.add(field)
+            except Exception:
+                pass
+                
+        except Exception as e:
+            # If XML parsing fails, fall back to a simpler approach
+            st.warning(f"Advanced text box detection failed: {e}. Using basic detection only.")
 
         # Alternative approach: check headers and footers which might contain text boxes
         for section in doc.sections:
@@ -186,7 +216,6 @@ def analyze_word_fields(uploaded_file):
     except Exception as e:
         st.error(f"Error analyzing Word document: {e}")
         return [], []
-
 # --- Helper and Filling Functions ---
 
 def generate_ai_prompt(fields, project_data):
@@ -298,30 +327,69 @@ def fill_word_with_data(doc_file, data):
     
     # Fill text boxes (NEW CODE)
     try:
-        # Access the document's XML to find and modify text boxes
-        for element in doc.element.xpath('//w:drawing'):
-            for txbx in element.xpath('.//w:txbxContent'):
-                for para_elem in txbx.xpath('.//w:p'):
-                    # Get all text elements in this paragraph
-                    text_elements = para_elem.xpath('.//w:t')
+        from lxml import etree
+        
+        # Define namespaces explicitly
+        namespaces = {
+            'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+            'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'
+        }
+        
+        # Get the document's XML tree
+        doc_xml = doc.element
+        
+        # Look for text elements in text boxes using various paths
+        textbox_paths = [
+            './/w:drawing//w:txbxContent//w:p//w:t',
+            './/w:drawing//a:txBody//a:p//a:t',
+            './/w:object//w:drawing//w:txbxContent//w:p//w:t',
+            './/w:pict//w:textbox//w:txbxContent//w:p//w:t'
+        ]
+        
+        for path in textbox_paths:
+            try:
+                text_elements = doc_xml.xpath(path, namespaces=namespaces)
+                
+                for t_elem in text_elements:
+                    if t_elem.text:
+                        original_text = t_elem.text
+                        modified_text = original_text
+                        
+                        # Replace all placeholders
+                        for field, value in data.items():
+                            placeholder = f"{{{{{field}}}}}"
+                            modified_text = modified_text.replace(placeholder, str(value))
+                        
+                        # Update the text if it was modified
+                        if modified_text != original_text:
+                            t_elem.text = modified_text
+                            
+            except Exception:
+                # Skip this path if it doesn't work
+                continue
+                
+        # Fallback: try to replace in all text elements
+        try:
+            all_text_elements = doc_xml.xpath('.//w:t', namespaces=namespaces)
+            for t_elem in all_text_elements:
+                if t_elem.text:
+                    original_text = t_elem.text
+                    modified_text = original_text
                     
-                    # Combine all text to check for placeholders
-                    full_text = "".join([t.text or "" for t in text_elements])
-                    
-                    # Replace placeholders in the combined text
-                    modified_text = full_text
                     for field, value in data.items():
                         placeholder = f"{{{{{field}}}}}"
-                        modified_text = modified_text.replace(placeholder, str(value))
+                        if placeholder in modified_text:
+                            modified_text = modified_text.replace(placeholder, str(value))
                     
-                    # If text was modified, update the first text element and clear others
-                    if modified_text != full_text and text_elements:
-                        text_elements[0].text = modified_text
-                        for t_elem in text_elements[1:]:
-                            t_elem.text = ""
+                    if modified_text != original_text:
+                        t_elem.text = modified_text
+                        
+        except Exception:
+            pass
     
     except Exception as e:
-        st.error(f"Error filling text boxes: {e}")
+        st.warning(f"Advanced text box filling failed: {e}. Basic filling completed.")
     
     # Fill headers and footers
     try:
@@ -503,6 +571,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
