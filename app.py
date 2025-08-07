@@ -20,8 +20,15 @@ st.set_page_config(
 )
 
 # Custom CSS for better styling
+# Custom CSS for better styling
 st.markdown("""
 <style>
+    /* Center the main content and set a maximum width */
+    .main .block-container {
+        max-width: 1080px;
+        margin: 0 auto;
+    }
+
     .main-header {
         text-align: center;
         color: #2c3e50;
@@ -611,6 +618,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
