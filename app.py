@@ -49,7 +49,7 @@ st.markdown("""
         margin: 10px 0;
     }
     .warning-box {
-        background-color: #fff3cd;
+        background-color: #fff000;
         border: 1px solid #ffeaa7;
         border-radius: 5px;
         padding: 15px;
@@ -255,7 +255,7 @@ def fill_word_with_data(doc_file, data):
 # --- Main Application Logic ---
 
 def main():
-    st.warning('**DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM**')
+    st.warning('**DO NOT ENTER CUI OR PII INTO THIS SYSTEM - FOR BETA TESTING AND NON-OFFICIAL USE ONLY**')
     try:
         st.image("banner.png", use_container_width=True)
     except Exception as e:
@@ -410,4 +410,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
