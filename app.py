@@ -766,7 +766,7 @@ def main():
                                                 progress_container.success(f"✅ PDF generated successfully! Made {replacements} replacements.")
                                             else:
                                                 st.error("Failed to generate filled PDF")
-                                                continue
+                                                st.stop()
                                         
                                         if file_extension != 'pdf':
                                             progress_container.success("✅ Document generated successfully!")
@@ -883,7 +883,7 @@ def main():
                                     progress_container.success(f"✅ PDF generated successfully! Made {replacements} replacements.")
                                 else:
                                     st.error("Failed to generate filled PDF")
-                                    continue
+                                    st.stop()
                             
                             if file_extension != 'pdf':
                                 progress_container.success("✅ Document generated successfully with manual entry!")
