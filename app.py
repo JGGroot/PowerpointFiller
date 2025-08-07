@@ -911,15 +911,13 @@ def main():
                         with st.expander("📄 Click to view the generated AI Prompt", expanded=False):
                             st.code(st.session_state.ai_prompt, language="text")
                         
-                        # Use the original working copy component with popup
-                        copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
-                        
-                        # Show a temporary success message
-                        if 'show_copy_success' not in st.session_state:
-                            st.session_state.show_copy_success = False
-                        
-                        # Simple way to show feedback without breaking the copy function
-                        st.info("💡 Click the button above to copy the prompt, then paste it into your AI assistant.")
+                        # Use the original working copy component
+                        if copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt):
+                            st.success("✅ Prompt copied to clipboard!")
+                            # Clear the success message after a short delay
+                            import time
+                            time.sleep(2)
+                            st.rerun()
 
                         st.markdown("**Quick Link to AI Service:**")
                         st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
