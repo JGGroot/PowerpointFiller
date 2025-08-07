@@ -560,7 +560,7 @@ def main():
         To use this tool, your template should contain placeholders in the format {{field_name}}.
         For example: {{project_name}}, {{date}}, {{commander_name}}, etc.
         """)
-        st.markdown('</div>', unsafe_allow_html=True)rue)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Footer
     st.markdown("---")
@@ -577,5 +577,6 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Application error: {e}")
         st.info("Please refresh the page and try again. If the problem persists, check your template file format.")
+
 
 
