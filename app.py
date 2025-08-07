@@ -9,7 +9,7 @@ import io
 import zipfile
 from datetime import datetime
 import base64
-from streamlit_clipboard import copy # New import for the copy button
+from clipboard_component import copy_component, paste_component
 
 # Configure the page
 st.set_page_config(
@@ -611,3 +611,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
