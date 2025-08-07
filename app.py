@@ -28,8 +28,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Load prompt configuration
-@st.cache_data
+# Load prompt configuration (no caching to allow real-time updates)
 def load_prompt_config():
     """Load prompt configuration from JSON file"""
     config_file = "prompt_config.json"
@@ -438,7 +437,7 @@ def analyze_word_fields(uploaded_file):
 
 def generate_ai_prompt(fields, project_data, template_name=None):
     """Generate AI prompt using template-specific or default prompt"""
-    # Load prompt configuration
+    # Load prompt configuration (no caching - reads fresh every time)
     prompt_config = load_prompt_config()
     
     # Get the appropriate prompt template
