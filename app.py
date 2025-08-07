@@ -30,36 +30,16 @@ st.set_page_config(
 
 # Load prompt configuration (no caching to allow real-time updates)
 def load_prompt_config():
-    """Load prompt configuration from JSON file"""
+    """Load prompt configuration from JSON file (with debugging)."""
+    print("--- 1. Attempting to load config... ---") # DEBUG
     
-    # --- START of CHANGE ---
-    
-    # Get the absolute path to the directory where the script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Join that directory path with the config file name
     config_file = os.path.join(script_dir, "prompt_config.json")
-    # Emergency fallback prompt (only used if file doesn't exist or is completely broken)
-    emergency_fallback_prompt = """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
-**Document Fields to Fill:**
-
-{field_list}
-
-**Instructions:**
-
-1. Extract relevant information from the data for each field
-2. If a field name suggests specific content (e.g., "commander_name" should be a person's name), extract accordingly
-3. Be clear, professional, and concise. You are drafting documents for official government use so no slang etc. 
-4. Conduct market research with a focus on Department of Defense, Department of the Air Force, and with the goals of the 100th ARW and 352nd SOW mission goals in mind
-5. For fields with money, phone numbers, or other implied formatting, format the extracted values accordingly
-6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text based on context
-7. Return ONLY the JSON object - no explanations or additional text
-
-**Project Data to Analyze:**
-
-{project_data}
-
-Please analyze the above data and return the JSON object with field values"""
     
+    print(f"--- 2. Looking for file at this exact path: {config_file} ---") # DEBUG
+
+    # Emergency fallback prompt
+    emergency_fallback_prompt = "..." # (keep the full prompt text here)
     emergency_config = {
         "default_prompt": emergency_fallback_prompt,
         "template_prompts": {}
@@ -67,40 +47,53 @@ Please analyze the above data and return the JSON object with field values"""
     
     try:
         if os.path.exists(config_file):
+            print("--- 3. SUCCESS: File was found! Reading now... ---") # DEBUG
             with open(config_file, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
-                
+            print("--- 4. SUCCESS: JSON file loaded and parsed. Validating content... ---") # DEBUG
+            
             # Validate the JSON structure
             if not isinstance(config_data, dict):
+                print("--- ERROR: Top level of JSON is not a dictionary. ---") # DEBUG
                 return emergency_config
                 
-            # Initialize config with emergency defaults
+            # Initialize a clean config
             config = {
                 "default_prompt": emergency_fallback_prompt,
                 "template_prompts": {}
             }
             
             # Extract default_prompt from JSON
-            if "default_prompt" in config_data:
-                if isinstance(config_data["default_prompt"], str) and config_data["default_prompt"].strip():
-                    config["default_prompt"] = config_data["default_prompt"]
-            
+            if "default_prompt" in config_data and config_data["default_prompt"].strip():
+                config["default_prompt"] = config_data["default_prompt"]
+                print("--- 5a. SUCCESS: Loaded 'default_prompt'. ---") # DEBUG
+            else:
+                print("--- WARNING: 'default_prompt' not found or is empty in JSON. ---") # DEBUG
+
             # Extract template_prompts from JSON
-            if "template_prompts" in config_data:
-                if isinstance(config_data["template_prompts"], dict):
-                    for template_name, template_prompt in config_data["template_prompts"].items():
-                        if isinstance(template_prompt, str) and template_prompt.strip():
-                            config["template_prompts"][template_name] = template_prompt
+            if "template_prompts" in config_data and isinstance(config_data["template_prompts"], dict):
+                print("--- 5b. SUCCESS: Found 'template_prompts' dictionary. ---") # DEBUG
+                for template_name, template_prompt in config_data["template_prompts"].items():
+                    if isinstance(template_prompt, str) and template_prompt.strip():
+                        config["template_prompts"][template_name] = template_prompt
+                        print(f"    - Loaded prompt for: {template_name}") # DEBUG
+                    else:
+                        print(f"    - WARNING: Prompt for {template_name} is not a valid string or is empty.") # DEBUG
+            else:
+                print("--- WARNING: 'template_prompts' key not found or is not a dictionary. ---") # DEBUG
             
             return config
             
         else:
+            print("--- 3. FATAL ERROR: File was NOT found at the specified path. ---") # DEBUG
             return emergency_config
             
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"--- 4. FATAL ERROR: The file is not valid JSON. Error: {e} ---") # DEBUG
         return emergency_config
         
-    except Exception:
+    except Exception as e:
+        print(f"--- An unexpected error occurred: {e} ---") # DEBUG
         return emergency_config
 
 def get_template_prompt(template_name, prompt_config):
@@ -1218,4 +1211,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
