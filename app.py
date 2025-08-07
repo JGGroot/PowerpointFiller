@@ -282,7 +282,7 @@ def main():
     st.markdown("### 📁 Step 1: Choose Your Template")
 
     try:
-        template_files = glob.glob("/templates*.*")
+        template_files = glob.glob("templates/*.*")
         template_options = ["Upload my own template"] + template_files
     except Exception as e:
         st.error(f"Could not scan templates directory: {e}")
@@ -417,4 +417,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
