@@ -58,9 +58,28 @@ Please analyze the above data and return the JSON object with field values""",
     }
     
     try:
-        if os.path.exists(config_file):
+        # Debug: Show current working directory and file existence
+        current_dir = os.getcwd()
+        file_exists = os.path.exists(config_file)
+        file_path = os.path.abspath(config_file)
+        
+        st.info(f"Debug: Current directory: {current_dir}")
+        st.info(f"Debug: Looking for file: {file_path}")
+        st.info(f"Debug: File exists: {file_exists}")
+        
+        # List files in current directory for debugging
+        try:
+            files_in_dir = os.listdir('.')
+            config_files = [f for f in files_in_dir if 'config' in f.lower()]
+            st.info(f"Debug: Config-related files found: {config_files}")
+        except:
+            pass
+        
+        if file_exists:
             with open(config_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
+                
+            st.success(f"Successfully read {config_file} ({len(content)} characters)")
                 
             if not content:
                 st.warning("prompt_config.txt is empty. Using default prompt.")
