@@ -144,18 +144,17 @@ def analyze_word_fields(uploaded_file):
 
         # Check text boxes and shapes (NEW CODE)
         # Access the document's XML to find text boxes
-        from docx.oxml import parse_xml
         from docx.oxml.ns import nsdecls, qn
         
         # Get all drawing elements that might contain text boxes
         for element in doc.element.xpath('//w:drawing'):
             # Look for text content in drawing elements
-            for txbx in element.xpath('.//w:txbxContent', namespaces=doc.element.nsmap):
+            for txbx in element.xpath('.//w:txbxContent'):
                 # Get all paragraphs within the text box
-                for para_elem in txbx.xpath('.//w:p', namespaces=doc.element.nsmap):
+                for para_elem in txbx.xpath('.//w:p'):
                     # Extract text from the paragraph
                     text_content = ""
-                    for t_elem in para_elem.xpath('.//w:t', namespaces=doc.element.nsmap):
+                    for t_elem in para_elem.xpath('.//w:t'):
                         if t_elem.text:
                             text_content += t_elem.text
                     
@@ -504,6 +503,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
