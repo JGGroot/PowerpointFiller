@@ -61,31 +61,12 @@ Please analyze the above data and return the JSON object with field values"""
     }
     
     try:
-        # Debug: Show current working directory and file existence (commented out)
-        # current_dir = os.getcwd()
-        # file_exists = os.path.exists(config_file)
-        # file_path = os.path.abspath(config_file)
-        # st.info(f"Debug: Current directory: {current_dir}")
-        # st.info(f"Debug: Looking for file: {file_path}")
-        # st.info(f"Debug: File exists: {file_exists}")
-        
-        # List files in current directory for debugging (commented out)
-        # try:
-        #     files_in_dir = os.listdir('.')
-        #     config_files = [f for f in files_in_dir if 'config' in f.lower()]
-        #     st.info(f"Debug: Config-related files found: {config_files}")
-        # except:
-        #     pass
-        
         if os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
                 
-            st.success(f"Successfully loaded {config_file}")
-                
             # Validate the JSON structure
             if not isinstance(config_data, dict):
-                st.error("Invalid JSON format: Root must be an object")
                 return emergency_config
                 
             # Initialize config with emergency defaults
@@ -98,58 +79,30 @@ Please analyze the above data and return the JSON object with field values"""
             if "default_prompt" in config_data:
                 if isinstance(config_data["default_prompt"], str) and config_data["default_prompt"].strip():
                     config["default_prompt"] = config_data["default_prompt"]
-                    st.info("✅ Using default_prompt from prompt_config.json")
-                else:
-                    st.warning("default_prompt in JSON is empty or invalid. Using emergency fallback.")
-            else:
-                st.warning("No 'default_prompt' key found in JSON. Using emergency fallback.")
             
             # Extract template_prompts from JSON
             if "template_prompts" in config_data:
                 if isinstance(config_data["template_prompts"], dict):
-                    template_count = 0
                     for template_name, template_prompt in config_data["template_prompts"].items():
                         if isinstance(template_prompt, str) and template_prompt.strip():
                             config["template_prompts"][template_name] = template_prompt
-                            template_count += 1
-                            st.success(f"✅ Loaded custom prompt for: {template_name}")
-                        else:
-                            st.warning(f"Invalid prompt for template '{template_name}' - skipping")
-                    
-                    if template_count > 0:
-                        st.info(f"Successfully loaded {template_count} template-specific prompts")
-                    else:
-                        st.info("No valid template-specific prompts found in JSON")
-                else:
-                    st.warning("'template_prompts' in JSON is not a valid object - ignoring template prompts")
-            else:
-                st.info("No 'template_prompts' key found in JSON - no custom templates loaded")
             
             return config
             
         else:
-            st.warning(f"Could not find {config_file}. Using emergency fallback prompt.")
-            st.info("Create a prompt_config.json file with 'default_prompt' and 'template_prompts' keys.")
             return emergency_config
             
-    except json.JSONDecodeError as e:
-        st.error(f"Invalid JSON format in {config_file}: {e}")
-        st.warning("Using emergency fallback prompt instead.")
+    except json.JSONDecodeError:
         return emergency_config
         
-    except Exception as e:
-        st.error(f"Error reading prompt config file: {e}")
-        st.warning("Using emergency fallback prompt instead.")
+    except Exception:
         return emergency_config
 
 def get_template_prompt(template_name, prompt_config):
     """Get the appropriate prompt for a template"""
     if template_name and template_name in prompt_config.get("template_prompts", {}):
-        st.success(f"Using custom prompt for template: {template_name}")
         return prompt_config["template_prompts"][template_name]
     else:
-        if template_name and template_name != "Upload my own template":
-            st.info(f"No custom prompt found for '{template_name}', using default prompt")
         return prompt_config["default_prompt"]
 
 # Custom CSS for better styling
@@ -967,14 +920,6 @@ def main():
     else:
         source_file = selected_template
         template_name = os.path.basename(selected_template)
-    
-    # Show prompt configuration info
-    if template_name:
-        prompt_config = load_prompt_config()
-        if template_name in prompt_config.get("template_prompts", {}):
-            st.success(f"✅ Custom prompt configured for: {template_name}")
-        else:
-            st.info(f"ℹ️ Using default prompt for: {template_name}")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
