@@ -105,6 +105,21 @@ def analyze_pdf_fields(uploaded_file):
         field_locations = []
         field_pattern = r'\{\{([^}]+)\}\}'
         
+        # Check if PDF is encrypted/protected
+        if pdf_document.needs_pass:
+            st.warning("⚠️ PDF is password protected. Please provide the password or use an unprotected PDF.")
+            pdf_password = st.text_input("Enter PDF password:", type="password", key="pdf_password")
+            if pdf_password:
+                if pdf_document.authenticate(pdf_password):
+                    st.success("✅ PDF unlocked successfully!")
+                else:
+                    st.error("❌ Incorrect password. Please try again.")
+                    pdf_document.close()
+                    return [], []
+            else:
+                pdf_document.close()
+                return [], []
+        
         # Method 1: Extract text and look for {{field_name}} patterns
         for page_num in range(len(pdf_document)):
             page = pdf_document.load_page(page_num)
@@ -129,48 +144,71 @@ def analyze_pdf_fields(uploaded_file):
             
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             
+            # Handle encrypted PDFs
             if pdf_reader.is_encrypted:
-                st.warning("PDF is encrypted. Form field detection may be limited.")
+                # Try to decrypt with empty password first (common case)
+                try:
+                    pdf_reader.decrypt("")
+                    st.info("📋 PDF encryption bypassed for form field analysis.")
+                except:
+                    # If that fails and we have a password from earlier, try it
+                    if 'pdf_password' in st.session_state and st.session_state.pdf_password:
+                        try:
+                            pdf_reader.decrypt(st.session_state.pdf_password)
+                            st.info("📋 Using provided password for form field analysis.")
+                        except:
+                            st.warning("⚠️ Could not decrypt PDF for form field analysis. Text analysis will still work.")
+                            pdf_reader = None
+                    else:
+                        st.warning("⚠️ PDF is encrypted. Form field detection limited. Text pattern detection will still work.")
+                        pdf_reader = None
             
-            # Check each page for form fields
-            for page_num, page in enumerate(pdf_reader.pages):
-                if '/Annots' in page:
-                    annotations = page['/Annots']
-                    if annotations:
-                        for annotation_ref in annotations:
-                            annotation = annotation_ref.get_object()
-                            if annotation.get('/Subtype') == '/Widget':
-                                field_name = annotation.get('/T')
-                                if field_name:
-                                    field_name_str = field_name
-                                    # Check if field name contains our pattern
-                                    pattern_matches = re.findall(field_pattern, field_name_str)
-                                    if pattern_matches:
-                                        for field in pattern_matches:
-                                            found_fields.add(field)
-                                            field_locations.append({
-                                                'field': field,
-                                                'page': page_num + 1,
-                                                'type': 'form_field',
-                                                'field_name': field_name_str
-                                            })
-                                    else:
-                                        # Add the form field name itself as a potential field
-                                        found_fields.add(field_name_str)
-                                        field_locations.append({
-                                            'field': field_name_str,
-                                            'page': page_num + 1,
-                                            'type': 'form_field',
-                                            'field_name': field_name_str
-                                        })
+            if pdf_reader:
+                # Check each page for form fields
+                for page_num, page in enumerate(pdf_reader.pages):
+                    if '/Annots' in page:
+                        annotations = page['/Annots']
+                        if annotations:
+                            for annotation_ref in annotations:
+                                try:
+                                    annotation = annotation_ref.get_object()
+                                    if annotation.get('/Subtype') == '/Widget':
+                                        field_name = annotation.get('/T')
+                                        if field_name:
+                                            field_name_str = str(field_name)
+                                            # Check if field name contains our pattern
+                                            pattern_matches = re.findall(field_pattern, field_name_str)
+                                            if pattern_matches:
+                                                for field in pattern_matches:
+                                                    found_fields.add(field)
+                                                    field_locations.append({
+                                                        'field': field,
+                                                        'page': page_num + 1,
+                                                        'type': 'form_field_pattern',
+                                                        'field_name': field_name_str
+                                                    })
+                                            else:
+                                                # Add the form field name itself as a potential field
+                                                found_fields.add(field_name_str)
+                                                field_locations.append({
+                                                    'field': field_name_str,
+                                                    'page': page_num + 1,
+                                                    'type': 'form_field',
+                                                    'field_name': field_name_str
+                                                })
+                                except Exception as field_error:
+                                    # Skip problematic form fields
+                                    continue
+                                    
         except Exception as e:
-            st.warning(f"Could not analyze PDF form fields: {e}")
+            st.warning(f"Form field analysis encountered issues: {e}. Text analysis completed successfully.")
         
         pdf_document.close()
         return list(found_fields), field_locations
         
     except Exception as e:
         st.error(f"Error analyzing PDF: {str(e)}")
+        st.info("💡 **PDF Troubleshooting Tips:**\n- Ensure the PDF is not corrupted\n- Try removing password protection\n- Check if text is selectable (not scanned image)")
         return [], []
 
 def analyze_powerpoint_fields(uploaded_file):
@@ -384,7 +422,7 @@ def replace_text_in_paragraph(paragraph, key, value):
                 runs_to_modify[i].text = ""
 
 def fill_pdf_with_data(pdf_file, data):
-    """Fill PDF with data using PyMuPDF (fitz)"""
+    """Fill PDF with data using PyMuPDF (fitz) with encryption handling"""
     try:
         # Reset file pointer
         if hasattr(pdf_file, 'seek'):
@@ -393,6 +431,18 @@ def fill_pdf_with_data(pdf_file, data):
         pdf_bytes = pdf_file.read()
         pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
         
+        # Handle password-protected PDFs
+        if pdf_document.needs_pass:
+            if 'pdf_password' in st.session_state and st.session_state.pdf_password:
+                if not pdf_document.authenticate(st.session_state.pdf_password):
+                    st.error("Cannot fill PDF: Authentication failed")
+                    pdf_document.close()
+                    return None, 0
+            else:
+                st.error("Cannot fill encrypted PDF without password")
+                pdf_document.close()
+                return None, 0
+        
         field_pattern = r'\{\{([^}]+)\}\}'
         replacements_made = 0
         
@@ -400,7 +450,7 @@ def fill_pdf_with_data(pdf_file, data):
         for page_num in range(len(pdf_document)):
             page = pdf_document.load_page(page_num)
             
-            # Get all text instances
+            # Get all text instances with their positions
             text_instances = page.get_text("dict")
             
             # Look for and replace field patterns
@@ -411,25 +461,35 @@ def fill_pdf_with_data(pdf_file, data):
                             text = span.get("text", "")
                             
                             # Check if this text contains any of our fields
+                            original_text = text
+                            modified_text = text
+                            
                             for field, value in data.items():
                                 placeholder = f"{{{{{field}}}}}"
-                                if placeholder in text:
+                                if placeholder in modified_text:
+                                    modified_text = modified_text.replace(placeholder, str(value))
+                            
+                            # If text was modified, replace it
+                            if modified_text != original_text:
+                                try:
                                     # Get the rectangle coordinates
                                     rect = fitz.Rect(span["bbox"])
                                     
-                                    # Remove the old text by drawing a white rectangle over it
+                                    # Remove the old text by adding a redaction
                                     page.add_redact_annot(rect, fill=(1, 1, 1))
                                     page.apply_redactions()
                                     
                                     # Add the new text
-                                    new_text = text.replace(placeholder, str(value))
                                     page.insert_text(
                                         rect.top_left,
-                                        new_text,
+                                        modified_text,
                                         fontsize=span.get("size", 12),
-                                        color=(0, 0, 0)
+                                        color=(0, 0, 0),
+                                        fontname=span.get("font", "helv")
                                     )
                                     replacements_made += 1
+                                except Exception as text_error:
+                                    st.warning(f"Could not replace text on page {page_num + 1}: {text_error}")
         
         # Method 2: Try to handle form fields (if it's a fillable PDF)
         try:
@@ -439,39 +499,63 @@ def fill_pdf_with_data(pdf_file, data):
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             pdf_writer = PyPDF2.PdfWriter()
             
-            # If there are form fields, try to fill them
-            for page in pdf_reader.pages:
-                if '/Annots' in page:
-                    annotations = page['/Annots']
-                    if annotations:
-                        for annotation_ref in annotations:
-                            annotation = annotation_ref.get_object()
-                            if annotation.get('/Subtype') == '/Widget':
-                                field_name = annotation.get('/T')
-                                if field_name:
-                                    # Check if we have data for this field
-                                    for field, value in data.items():
-                                        placeholder = f"{{{{{field}}}}}"
-                                        if placeholder in field_name or field == field_name:
-                                            # Update form field value
-                                            if '/V' in annotation:
-                                                annotation.update({PyPDF2.generic.NameObject('/V'): 
-                                                                 PyPDF2.generic.TextStringObject(str(value))})
-                                                replacements_made += 1
-                
-                pdf_writer.add_page(page)
+            # Handle encryption for form filling
+            if pdf_reader.is_encrypted:
+                try:
+                    # Try empty password first
+                    pdf_reader.decrypt("")
+                except:
+                    # Try with provided password
+                    if 'pdf_password' in st.session_state and st.session_state.pdf_password:
+                        try:
+                            pdf_reader.decrypt(st.session_state.pdf_password)
+                        except:
+                            st.warning("Could not decrypt PDF for form field filling. Text replacement completed.")
+                            pdf_reader = None
+                    else:
+                        pdf_reader = None
             
-            # Create output buffer for form-filled PDF
-            if replacements_made > 0:
-                form_output = io.BytesIO()
-                pdf_writer.write(form_output)
-                form_output.seek(0)
+            # If decryption successful, try form field filling
+            if pdf_reader:
+                for page in pdf_reader.pages:
+                    if '/Annots' in page:
+                        annotations = page['/Annots']
+                        if annotations:
+                            for annotation_ref in annotations:
+                                try:
+                                    annotation = annotation_ref.get_object()
+                                    if annotation.get('/Subtype') == '/Widget':
+                                        field_name = annotation.get('/T')
+                                        if field_name:
+                                            field_name_str = str(field_name)
+                                            
+                                            # Check if we have data for this field
+                                            for field, value in data.items():
+                                                placeholder = f"{{{{{field}}}}}"
+                                                if placeholder in field_name_str or field == field_name_str:
+                                                    # Update form field value
+                                                    if '/V' in annotation:
+                                                        annotation.update({PyPDF2.generic.NameObject('/V'): 
+                                                                         PyPDF2.generic.TextStringObject(str(value))})
+                                                        replacements_made += 1
+                                except Exception as form_error:
+                                    # Skip problematic form fields
+                                    continue
+                    
+                    pdf_writer.add_page(page)
                 
-                # Reopen with fitz to continue with text replacements
-                pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
+                # If form fields were modified, use the form-filled version
+                if pdf_writer.pages:
+                    form_output = io.BytesIO()
+                    pdf_writer.write(form_output)
+                    form_output.seek(0)
+                    
+                    # Close the original and reopen the form-filled version
+                    pdf_document.close()
+                    pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
         
         except Exception as e:
-            st.warning(f"Form field filling partially failed: {e}. Continuing with text replacement.")
+            st.warning(f"Form field filling encountered issues: {e}. Text replacement completed.")
         
         # Save the modified PDF
         output_buffer = io.BytesIO()
