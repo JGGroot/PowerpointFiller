@@ -13,6 +13,12 @@ from clipboard_component import copy_component, paste_component
 import docx
 import glob
 
+# PDF support imports
+import fitz  # PyMuPDF
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+import PyPDF2
+
 # Configure the page
 st.set_page_config(
     page_title="Document AI Field Filler",
@@ -83,6 +89,89 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Analysis Functions ---
+
+def analyze_pdf_fields(uploaded_file):
+    """Analyze PDF file for field placeholders and form fields"""
+    try:
+        # Reset file pointer
+        if hasattr(uploaded_file, 'seek'):
+            uploaded_file.seek(0)
+        
+        # Read PDF with PyMuPDF
+        pdf_bytes = uploaded_file.read()
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        
+        found_fields = set()
+        field_locations = []
+        field_pattern = r'\{\{([^}]+)\}\}'
+        
+        # Method 1: Extract text and look for {{field_name}} patterns
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            text_content = page.get_text()
+            
+            # Find field patterns in text
+            matches = re.findall(field_pattern, text_content)
+            for field in matches:
+                found_fields.add(field)
+                field_locations.append({
+                    'field': field,
+                    'page': page_num + 1,
+                    'type': 'text',
+                    'context': text_content[:100] + '...' if len(text_content) > 100 else text_content
+                })
+        
+        # Method 2: Check for form fields (if it's a fillable PDF)
+        try:
+            # Reset file pointer for PyPDF2
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)
+            
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            
+            if pdf_reader.is_encrypted:
+                st.warning("PDF is encrypted. Form field detection may be limited.")
+            
+            # Check each page for form fields
+            for page_num, page in enumerate(pdf_reader.pages):
+                if '/Annots' in page:
+                    annotations = page['/Annots']
+                    if annotations:
+                        for annotation_ref in annotations:
+                            annotation = annotation_ref.get_object()
+                            if annotation.get('/Subtype') == '/Widget':
+                                field_name = annotation.get('/T')
+                                if field_name:
+                                    field_name_str = field_name
+                                    # Check if field name contains our pattern
+                                    pattern_matches = re.findall(field_pattern, field_name_str)
+                                    if pattern_matches:
+                                        for field in pattern_matches:
+                                            found_fields.add(field)
+                                            field_locations.append({
+                                                'field': field,
+                                                'page': page_num + 1,
+                                                'type': 'form_field',
+                                                'field_name': field_name_str
+                                            })
+                                    else:
+                                        # Add the form field name itself as a potential field
+                                        found_fields.add(field_name_str)
+                                        field_locations.append({
+                                            'field': field_name_str,
+                                            'page': page_num + 1,
+                                            'type': 'form_field',
+                                            'field_name': field_name_str
+                                        })
+        except Exception as e:
+            st.warning(f"Could not analyze PDF form fields: {e}")
+        
+        pdf_document.close()
+        return list(found_fields), field_locations
+        
+    except Exception as e:
+        st.error(f"Error analyzing PDF: {str(e)}")
+        return [], []
 
 def analyze_powerpoint_fields(uploaded_file):
     """(Corrected) Analyze PowerPoint file for field placeholders"""
@@ -235,8 +324,8 @@ def generate_ai_prompt(fields, project_data):
     """Generate AI prompt"""
     field_descriptions = [f"  - {field}" for field in sorted(fields)]
     
-    prompt = f"""I need you to analyze project data and extract information for specific PowerPoint fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
-**PowerPoint Fields to Fill:**
+    prompt = f"""I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
+**Document Fields to Fill:**
 
 {chr(10).join(field_descriptions)}
 
@@ -293,6 +382,107 @@ def replace_text_in_paragraph(paragraph, key, value):
             runs_to_modify[0].text = new_text
             for i in range(1, len(runs_to_modify)):
                 runs_to_modify[i].text = ""
+
+def fill_pdf_with_data(pdf_file, data):
+    """Fill PDF with data using PyMuPDF (fitz)"""
+    try:
+        # Reset file pointer
+        if hasattr(pdf_file, 'seek'):
+            pdf_file.seek(0)
+        
+        pdf_bytes = pdf_file.read()
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        
+        field_pattern = r'\{\{([^}]+)\}\}'
+        replacements_made = 0
+        
+        # Method 1: Replace text content (for text-based PDFs)
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            
+            # Get all text instances
+            text_instances = page.get_text("dict")
+            
+            # Look for and replace field patterns
+            for block in text_instances["blocks"]:
+                if "lines" in block:
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            text = span.get("text", "")
+                            
+                            # Check if this text contains any of our fields
+                            for field, value in data.items():
+                                placeholder = f"{{{{{field}}}}}"
+                                if placeholder in text:
+                                    # Get the rectangle coordinates
+                                    rect = fitz.Rect(span["bbox"])
+                                    
+                                    # Remove the old text by drawing a white rectangle over it
+                                    page.add_redact_annot(rect, fill=(1, 1, 1))
+                                    page.apply_redactions()
+                                    
+                                    # Add the new text
+                                    new_text = text.replace(placeholder, str(value))
+                                    page.insert_text(
+                                        rect.top_left,
+                                        new_text,
+                                        fontsize=span.get("size", 12),
+                                        color=(0, 0, 0)
+                                    )
+                                    replacements_made += 1
+        
+        # Method 2: Try to handle form fields (if it's a fillable PDF)
+        try:
+            if hasattr(pdf_file, 'seek'):
+                pdf_file.seek(0)
+            
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            pdf_writer = PyPDF2.PdfWriter()
+            
+            # If there are form fields, try to fill them
+            for page in pdf_reader.pages:
+                if '/Annots' in page:
+                    annotations = page['/Annots']
+                    if annotations:
+                        for annotation_ref in annotations:
+                            annotation = annotation_ref.get_object()
+                            if annotation.get('/Subtype') == '/Widget':
+                                field_name = annotation.get('/T')
+                                if field_name:
+                                    # Check if we have data for this field
+                                    for field, value in data.items():
+                                        placeholder = f"{{{{{field}}}}}"
+                                        if placeholder in field_name or field == field_name:
+                                            # Update form field value
+                                            if '/V' in annotation:
+                                                annotation.update({PyPDF2.generic.NameObject('/V'): 
+                                                                 PyPDF2.generic.TextStringObject(str(value))})
+                                                replacements_made += 1
+                
+                pdf_writer.add_page(page)
+            
+            # Create output buffer for form-filled PDF
+            if replacements_made > 0:
+                form_output = io.BytesIO()
+                pdf_writer.write(form_output)
+                form_output.seek(0)
+                
+                # Reopen with fitz to continue with text replacements
+                pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
+        
+        except Exception as e:
+            st.warning(f"Form field filling partially failed: {e}. Continuing with text replacement.")
+        
+        # Save the modified PDF
+        output_buffer = io.BytesIO()
+        pdf_document.save(output_buffer)
+        pdf_document.close()
+        
+        return output_buffer.getvalue(), replacements_made
+        
+    except Exception as e:
+        st.error(f"Error filling PDF: {str(e)}")
+        return None, 0
 
 def fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container):
     """(CORRECTED) Fill PowerPoint with data preserving formatting."""
@@ -437,7 +627,7 @@ def main():
         st.info("Info: `banner.png` not found. Skipping image banner.")
 
     st.markdown('<div class="main-header">📊 Document AI Field Filler</div>', unsafe_allow_html=True)
-    st.markdown("**Transform your templates with AI-powered data filling! This tool will take unformatted data and conduct research, formatting, organization, data extraction, and place it in a pre-made template or bring your own!**")
+    st.markdown("**Transform your templates with AI-powered data filling! This tool supports PowerPoint, Word, and PDF documents. It will take unformatted data and conduct research, formatting, organization, data extraction, and place it in a pre-made template or bring your own!**")
 
     if 'fields' not in st.session_state:
         st.session_state.fields = []
@@ -460,7 +650,7 @@ def main():
     source_file = None 
 
     if selected_template == "Upload my own template":
-        source_file = st.file_uploader("Choose your template file", type=['pptx', 'docx'])
+        source_file = st.file_uploader("Choose your template file", type=['pptx', 'docx', 'pdf'])
     else:
         source_file = selected_template
     
@@ -475,8 +665,10 @@ def main():
                 st.session_state.fields, st.session_state.field_locations = analyze_powerpoint_fields(source_file)
             elif file_extension == 'docx':
                 st.session_state.fields, st.session_state.field_locations = analyze_word_fields(source_file)
+            elif file_extension == 'pdf':
+                st.session_state.fields, st.session_state.field_locations = analyze_pdf_fields(source_file)
             else:
-                st.error("Unsupported file type.")
+                st.error("Unsupported file type. Supported formats: PowerPoint (.pptx), Word (.docx), PDF (.pdf)")
                 return
 
         if st.session_state.fields:
@@ -489,11 +681,15 @@ def main():
                     st.write("**Found Fields:**")
                     st.write(st.session_state.fields)
                 with col2:
-                    st.write("**Field Locations (PowerPoint only):**")
-                    if file_extension == 'pptx' and st.session_state.field_locations:
-                        st.write(st.session_state.field_locations)
+                    st.write("**Field Locations:**")
+                    if st.session_state.field_locations:
+                        for location in st.session_state.field_locations:
+                            if file_extension == 'pdf':
+                                st.write(f"• **{location['field']}** (Page {location['page']}, Type: {location['type']})")
+                            elif file_extension == 'pptx':
+                                st.write(f"• **{location['field']}** (Slide {location['slide']})")
                     else:
-                        st.write("Location data is not available for Word documents.")
+                        st.write("Location data not available for this document type.")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -506,12 +702,8 @@ def main():
                 st.markdown("### 📝 Step 2: Enter Your Applicable Data Or Text. This can be formatted in any way, stream of thought, lists, sentences, etc. The more you provide the better your result will be. Any field on your template that is not covered will be TBD")
                 project_data = st.text_area("Enter your data here:", height=200)
                 
-                # Image upload temporarily disabled
+                # Image upload temporarily disabled for all formats
                 uploaded_image = None
-                # if file_extension == 'pptx':
-                #     uploaded_image = st.file_uploader("Choose an image file (for PowerPoint only)", type=['png', 'jpg', 'jpeg'])
-                #     if uploaded_image:
-                #         st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -565,8 +757,20 @@ def main():
                                             filled_doc.save(output_buffer)
                                             download_filename = f"filled_document_{timestamp}.docx"
                                             mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                        elif file_extension == 'pdf':
+                                            filled_pdf_bytes, replacements = fill_pdf_with_data(source_file, json_data)
+                                            if filled_pdf_bytes:
+                                                output_buffer.write(filled_pdf_bytes)
+                                                download_filename = f"filled_document_{timestamp}.pdf"
+                                                mime_type = "application/pdf"
+                                                progress_container.success(f"✅ PDF generated successfully! Made {replacements} replacements.")
+                                            else:
+                                                st.error("Failed to generate filled PDF")
+                                                continue
                                         
-                                        progress_container.success("✅ Document generated successfully!")
+                                        if file_extension != 'pdf':
+                                            progress_container.success("✅ Document generated successfully!")
+                                        
                                         st.download_button(
                                             label=f"📥 Download Filled {file_extension.upper()}",
                                             data=output_buffer.getvalue(),
@@ -670,8 +874,20 @@ def main():
                                 filled_doc.save(output_buffer)
                                 download_filename = f"manual_filled_document_{timestamp}.docx"
                                 mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            elif file_extension == 'pdf':
+                                filled_pdf_bytes, replacements = fill_pdf_with_data(source_file, manual_data)
+                                if filled_pdf_bytes:
+                                    output_buffer.write(filled_pdf_bytes)
+                                    download_filename = f"manual_filled_document_{timestamp}.pdf"
+                                    mime_type = "application/pdf"
+                                    progress_container.success(f"✅ PDF generated successfully! Made {replacements} replacements.")
+                                else:
+                                    st.error("Failed to generate filled PDF")
+                                    continue
                             
-                            progress_container.success("✅ Document generated successfully with manual entry!")
+                            if file_extension != 'pdf':
+                                progress_container.success("✅ Document generated successfully with manual entry!")
+                            
                             st.download_button(
                                 label=f"📥 Download Manual Filled {file_extension.upper()}",
                                 data=output_buffer.getvalue(),
@@ -701,16 +917,24 @@ def main():
         elif source_file is not None:
             st.markdown('<div class="warning-box">', unsafe_allow_html=True)
             st.warning("⚠️ No {{field_name}} placeholders found in your template!")
+            
+            if file_extension == 'pdf':
+                st.info("""
+                **PDF Tips:**
+                - For text-based PDFs: Add placeholders like {{field_name}} in the text
+                - For form-based PDFs: Use form field names that match your data fields
+                - Some complex PDF structures may not be fully supported
+                """)
+            
             st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #666; padding: 20px;">
         <p>🚀 Built for NIPR environments • No local installation required • Works in any browser</p>
+        <p>📄 Supports PowerPoint (.pptx), Word (.docx), and PDF (.pdf) templates</p>
     </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
-
-
