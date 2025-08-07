@@ -301,10 +301,10 @@ def fill_word_with_data(doc_file, data):
     try:
         # Access the document's XML to find and modify text boxes
         for element in doc.element.xpath('//w:drawing'):
-            for txbx in element.xpath('.//w:txbxContent', namespaces=doc.element.nsmap):
-                for para_elem in txbx.xpath('.//w:p', namespaces=doc.element.nsmap):
+            for txbx in element.xpath('.//w:txbxContent'):
+                for para_elem in txbx.xpath('.//w:p'):
                     # Get all text elements in this paragraph
-                    text_elements = para_elem.xpath('.//w:t', namespaces=doc.element.nsmap)
+                    text_elements = para_elem.xpath('.//w:t')
                     
                     # Combine all text to check for placeholders
                     full_text = "".join([t.text or "" for t in text_elements])
@@ -504,6 +504,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
