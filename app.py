@@ -9,6 +9,7 @@ import io
 import zipfile
 from datetime import datetime
 import base64
+from streamlit_clipboard import copy # New import for the copy button
 
 # Configure the page
 st.set_page_config(
@@ -63,9 +64,7 @@ st.markdown("""
         display: inline-block;
         text-align: center;
     }
-    .claude-btn { background-color: #ff6b35; }
-    .chatgpt-btn { background-color: #10a37f; }
-    .gemini-btn { background-color: #4285f4; }
+    .nipr-btn { background-color: #004d40; } /* Dark Teal for NiprGPT */
 </style>
 """, unsafe_allow_html=True)
 
@@ -407,6 +406,10 @@ def create_download_link(data, filename):
 def main():
     # Header
     st.markdown('<div class="main-header">📊 PowerPoint AI Field Filler</div>', unsafe_allow_html=True)
+    
+    # --- NEW: Warning Banner ---
+    st.warning("DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM")
+    
     st.markdown("**Transform your PowerPoint templates with AI-powered data filling!**")
     
     # Initialize session state
@@ -417,37 +420,59 @@ def main():
     if 'ai_prompt' not in st.session_state:
         st.session_state.ai_prompt = ""
 
-    # Step 1: Upload PowerPoint
+    # --- MODIFIED: Step 1 ---
     st.markdown('<div class="step-container">', unsafe_allow_html=True)
-    st.markdown("### 📁 Step 1: Upload Your PowerPoint Template")
+    st.markdown("### 📁 Step 1: Choose Your PowerPoint Template")
     
-    uploaded_file = st.file_uploader(
-        "Choose your PowerPoint template with {{field_name}} placeholders",
-        type=['pptx'],
-        help="Upload a PowerPoint file containing placeholders like {{project_title}}, {{commander_name}}, etc."
+    template_choice = st.radio(
+        "Select a template source:",
+        ('Use the One-Pager template', 'Upload your own template'),
+        horizontal=True,
+        label_visibility="collapsed"
     )
+
+    uploaded_file = None
+    
+    if template_choice == 'Upload your own template':
+        uploaded_file = st.file_uploader(
+            "Choose your PowerPoint template with {{field_name}} placeholders",
+            type=['pptx'],
+            help="Upload a PowerPoint file containing placeholders like {{project_title}}, {{commander_name}}, etc."
+        )
+    else:
+        try:
+            with open("onepager_template.pptx", "rb") as f:
+                uploaded_file = io.BytesIO(f.read())
+            st.success("✅ Loaded the built-in 'One-Pager' template.")
+        except FileNotFoundError:
+            st.error("Error: `onepager_template.pptx` not found in the repository. Please ask the app administrator to upload it.")
+    
     st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_file is not None:
         with st.spinner('🔍 Analyzing PowerPoint fields...'):
+            # When using the local file, we give it a name attribute for consistency
+            if not hasattr(uploaded_file, 'name'):
+                 uploaded_file.name = "onepager_template.pptx"
             st.session_state.fields, st.session_state.field_locations = analyze_powerpoint_fields(uploaded_file)
         
         if st.session_state.fields:
             st.markdown('<div class="success-box">', unsafe_allow_html=True)
-            st.success(f"Found {len(st.session_state.fields)} placeholders!")
+            st.success(f"Found {len(st.session_state.fields)} placeholders in '{uploaded_file.name}'!")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Found Fields:**")
-                for field in sorted(st.session_state.fields):
-                    st.write(f"• `{{{{{field}}}}}`")
-            
-            with col2:
-                st.write("**Field Locations:**")
-                for i, loc in enumerate(st.session_state.field_locations[:5]):
-                    st.write(f"• `{{{{{loc['field']}}}}}` on Slide {loc['slide']}")
-                if len(st.session_state.field_locations) > 5:
-                    st.write(f"... and {len(st.session_state.field_locations) - 5} more")
+            with st.expander("Click to see found fields and their locations"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Found Fields:**")
+                    for field in sorted(st.session_state.fields):
+                        st.write(f"• `{{{{{field}}}}}`")
+                
+                with col2:
+                    st.write("**Field Locations (first 5):**")
+                    for loc in st.session_state.field_locations[:5]:
+                        st.write(f"• `{{{{{loc['field']}}}}}` on Slide {loc['slide']}")
+                    if len(st.session_state.field_locations) > 5:
+                        st.write(f"... and {len(st.session_state.field_locations) - 5} more")
             
             st.markdown('</div>', unsafe_allow_html=True)
             
@@ -484,33 +509,21 @@ def main():
                     st.markdown('<div class="step-container">', unsafe_allow_html=True)
                     st.markdown("### 📋 Step 3: Copy Prompt to AI")
                     
-                    st.info("Copy this prompt to your preferred AI assistant:")
+                    st.info("Copy this prompt and paste it into your preferred AI assistant.")
                     
                     # Display the prompt in an expandable section
-                    with st.expander("📄 Click to view AI Prompt", expanded=True):
+                    with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
                         st.code(st.session_state.ai_prompt, language="text")
                     
-                    # AI Service buttons
-                    st.markdown("**Quick Links to AI Services:**")
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.markdown(
-                            f'<a href="https://claude.ai" target="_blank" class="ai-button claude-btn">🧠 Open Claude</a>',
-                            unsafe_allow_html=True
-                        )
-                    
-                    with col2:
-                        st.markdown(
-                            f'<a href="https://chat.openai.com" target="_blank" class="ai-button chatgpt-btn">💬 Open ChatGPT</a>',
-                            unsafe_allow_html=True
-                        )
-                    
-                    with col3:
-                        st.markdown(
-                            f'<a href="https://gemini.google.com" target="_blank" class="ai-button gemini-btn">✨ Open Gemini</a>',
-                            unsafe_allow_html=True
-                        )
+                    # --- NEW: Copy to Clipboard Button ---
+                    copy(st.session_state.ai_prompt, "📋 Copy Prompt to Clipboard")
+
+                    # --- MODIFIED: AI Service Button ---
+                    st.markdown("**Quick Link to AI Service:**")
+                    st.markdown(
+                        f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>',
+                        unsafe_allow_html=True
+                    )
                     
                     st.markdown('</div>', unsafe_allow_html=True)
                     
@@ -527,7 +540,11 @@ def main():
                     if ai_response.strip():
                         try:
                             # Validate JSON
-                            json_data = json.loads(ai_response)
+                            json_str_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                            if not json_str_match:
+                                raise json.JSONDecodeError("No JSON object found in the response.", ai_response, 0)
+                            
+                            json_data = json.loads(json_str_match.group(0))
                             
                             st.success("✅ Valid JSON detected!")
                             
@@ -571,12 +588,12 @@ def main():
                                         st.balloons()  # Celebration animation!
                         
                         except json.JSONDecodeError as e:
-                            st.error(f"❌ Invalid JSON format: {str(e)}")
-                            st.info("💡 Make sure the AI response is valid JSON format")
+                            st.error(f"❌ Invalid JSON format in the AI response: {str(e)}")
+                            st.info("💡 Please ensure you paste the entire, unmodified JSON object from the AI.")
                     
                     st.markdown('</div>', unsafe_allow_html=True)
         
-        else:
+        elif uploaded_file is not None: # This check prevents the message from showing before analysis
             st.markdown('<div class="warning-box">', unsafe_allow_html=True)
             st.warning("⚠️ No {{field_name}} placeholders found in your PowerPoint!")
             st.write("Make sure your PowerPoint contains placeholders like:")
@@ -594,4 +611,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
