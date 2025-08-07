@@ -515,8 +515,7 @@ def main():
                     with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
                         st.code(st.session_state.ai_prompt, language="text")
                     
-                    # --- NEW: Copy to Clipboard Button ---
-                    copy(st.session_state.ai_prompt, "📋 Copy Prompt to Clipboard")
+                    copy_component(st.session_state.ai_prompt, "📋 Copy Prompt to Clipboard")
 
                     # --- MODIFIED: AI Service Button ---
                     st.markdown("**Quick Link to AI Service:**")
@@ -611,4 +610,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
