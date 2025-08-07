@@ -12,6 +12,7 @@ import base64
 from clipboard_component import copy_component, paste_component
 import docx
 import glob
+import os
 
 # PDF support imports
 import fitz  # PyMuPDF
@@ -26,6 +27,69 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
+
+# Load prompt configuration
+@st.cache_data
+def load_prompt_config():
+    """Load prompt configuration from config file"""
+    config_file = "prompt_config.json"
+    default_config = {
+        "default_prompt": """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
+**Document Fields to Fill:**
+
+{field_list}
+
+**Instructions:**
+
+1. Extract relevant information from the data for each field
+2. If a field name suggests specific content (e.g., "commander_name" should be a person's name), extract accordingly
+3. Be clear, professional, and concise. You are drafting documents for official government use so no slang etc. 
+4. Conduct market research with a focus on Department of Defense, Department of the Air Force, and with the goals of the 100th ARW and 352nd SOW mission goals in mind
+5. For fields with money, phone numbers, or other implied formatting, format the extracted values accordingly
+6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text based on context
+7. Return ONLY the JSON object - no explanations or additional text
+
+**Project Data to Analyze:**
+
+{project_data}
+
+Please analyze the above data and return the JSON object with field values""",
+        "template_prompts": {
+            "example_template.pptx": "Custom prompt for example template...",
+            "military_brief.pptx": "Military-specific prompt for briefing template..."
+        }
+    }
+    
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # Ensure default_prompt exists
+                if "default_prompt" not in config:
+                    config["default_prompt"] = default_config["default_prompt"]
+                # Ensure template_prompts exists
+                if "template_prompts" not in config:
+                    config["template_prompts"] = {}
+                return config
+        else:
+            # Create default config file
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=2)
+            st.info(f"Created default prompt configuration file: {config_file}")
+            return default_config
+    except Exception as e:
+        st.warning(f"Could not load prompt config: {e}. Using default prompt.")
+        return default_config
+
+def get_template_prompt(template_name, prompt_config):
+    """Get the appropriate prompt for a template"""
+    if template_name and template_name in prompt_config.get("template_prompts", {}):
+        st.info(f"Using custom prompt for template: {template_name}")
+        return prompt_config["template_prompts"][template_name]
+    else:
+        if template_name and template_name != "Upload my own template":
+            st.info(f"No custom prompt found for '{template_name}', using default prompt")
+        return prompt_config["default_prompt"]
 
 # Custom CSS for better styling
 st.markdown("""
@@ -358,32 +422,25 @@ def analyze_word_fields(uploaded_file):
 
 # --- Helper and Filling Functions ---
 
-def generate_ai_prompt(fields, project_data):
-    """Generate AI prompt"""
+def generate_ai_prompt(fields, project_data, template_name=None):
+    """Generate AI prompt using template-specific or default prompt"""
+    # Load prompt configuration
+    prompt_config = load_prompt_config()
+    
+    # Get the appropriate prompt template
+    prompt_template = get_template_prompt(template_name, prompt_config)
+    
+    # Prepare field list
     field_descriptions = [f"  - {field}" for field in sorted(fields)]
+    field_list = chr(10).join(field_descriptions)
     
-    prompt = f"""I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
-**Document Fields to Fill:**
-
-{chr(10).join(field_descriptions)}
-
-**Instructions:**
-
-1. Extract relevant information from the data for each field
-2. If a field name suggests specific content (e.g., "commander_name" should be a person's name), extract accordingly
-3. Be clear, professional, and concise. You are drafting documents for official government use so no slang etc. 
-4. Conduct market research with a focus on Department of Defense, Department of the Air Force, and with the goals of the 100th ARW and 352nd SOW mission goals in mind
-5. For fields with money, phone numbers, or other implied formatting, format the extracted values accordingly
-6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text based on context
-7. Return ONLY the JSON object - no explanations or additional text
-
-**Project Data to Analyze:**
-
-{project_data}
-
-Please analyze the above data and return the JSON object with field values"""
+    # Replace placeholders in the prompt template
+    final_prompt = prompt_template.format(
+        field_list=field_list,
+        project_data=project_data
+    )
     
-    return prompt
+    return final_prompt
 
 def replace_text_in_paragraph(paragraph, key, value):
     """(NEW) Replaces text in a paragraph, preserving formatting.
@@ -840,11 +897,23 @@ def main():
 
     selected_template = st.selectbox("Select a template or upload your own:", options=template_options)
     source_file = None 
+    template_name = None  # Track template name for prompt selection
 
     if selected_template == "Upload my own template":
         source_file = st.file_uploader("Choose your template file", type=['pptx', 'docx', 'pdf'])
+        if source_file:
+            template_name = source_file.name
     else:
         source_file = selected_template
+        template_name = os.path.basename(selected_template)
+    
+    # Show prompt configuration info
+    if template_name:
+        prompt_config = load_prompt_config()
+        if template_name in prompt_config.get("template_prompts", {}):
+            st.success(f"✅ Custom prompt configured for: {template_name}")
+        else:
+            st.info(f"ℹ️ Using default prompt for: {template_name}")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -901,7 +970,7 @@ def main():
 
                 if project_data.strip():
                     if st.button("🤖 Generate AI Prompt", type="primary", key="ai_prompt_btn"):
-                        st.session_state.ai_prompt = generate_ai_prompt(st.session_state.fields, project_data)
+                        st.session_state.ai_prompt = generate_ai_prompt(st.session_state.fields, project_data, template_name)
                     
                     if st.session_state.ai_prompt:
                         st.markdown('<div class="step-container">', unsafe_allow_html=True)
@@ -911,13 +980,15 @@ def main():
                         with st.expander("📄 Click to view the generated AI Prompt", expanded=False):
                             st.code(st.session_state.ai_prompt, language="text")
                         
-                        # Use the original working copy component
-                        if copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt):
-                            st.success("✅ Prompt copied to clipboard!")
-                            # Clear the success message after a short delay
-                            import time
-                            time.sleep(2)
-                            st.rerun()
+                        # Use the original working copy component with popup
+                        copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
+                        
+                        # Show a temporary success message
+                        if 'show_copy_success' not in st.session_state:
+                            st.session_state.show_copy_success = False
+                        
+                        # Simple way to show feedback without breaking the copy function
+                        st.info("💡 Click the button above to copy the prompt, then paste it into your AI assistant.")
 
                         st.markdown("**Quick Link to AI Service:**")
                         st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
