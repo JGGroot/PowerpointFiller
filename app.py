@@ -186,10 +186,6 @@ def analyze_word_fields(uploaded_file):
         
     except Exception as e:
         st.error(f"Error analyzing Word document: {e}")
-        return [], []]
-        
-    except Exception as e:
-        st.error(f"Error analyzing Word document: {e}")
         return [], []
 
 # --- Helper and Filling Functions ---
@@ -508,6 +504,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
