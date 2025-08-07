@@ -2,7 +2,7 @@
   "default_prompt": "testing",
   "template_prompts": {
     "MFR Template.docx": "Custom prompt for example template...",
-    "military_brief.pptx": "Military-specific prompt for briefing template...",
+    "Project OnePager.pptx": "Military-specific prompt for briefing template...",
     "quarterly_report.docx": "Financial analysis prompt for quarterly reports..."
   }
 }
