@@ -31,8 +31,8 @@ st.set_page_config(
 # Load prompt configuration
 @st.cache_data
 def load_prompt_config():
-    """Load prompt configuration from config file"""
-    config_file = "prompt_config.json"
+    """Load prompt configuration from text file"""
+    config_file = "prompt_config.txt"
     default_config = {
         "default_prompt": """I need you to analyze project data and extract information for specific document fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
 **Document Fields to Fill:**
@@ -54,37 +54,58 @@ def load_prompt_config():
 {project_data}
 
 Please analyze the above data and return the JSON object with field values""",
-        "template_prompts": {
-            "example_template.pptx": "Custom prompt for example template...",
-            "military_brief.pptx": "Military-specific prompt for briefing template..."
-        }
+        "template_prompts": {}
     }
     
     try:
         if os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                # Ensure default_prompt exists
-                if "default_prompt" not in config:
-                    config["default_prompt"] = default_config["default_prompt"]
-                # Ensure template_prompts exists
-                if "template_prompts" not in config:
-                    config["template_prompts"] = {}
-                return config
+                content = f.read().strip()
+                
+            if not content:
+                st.warning("prompt_config.txt is empty. Using default prompt.")
+                return default_config
+                
+            # Parse the text file format
+            config = {"template_prompts": {}, "default_prompt": default_config["default_prompt"]}
+            
+            # Split by template sections
+            sections = content.split("---TEMPLATE:")
+            
+            # First section before any template is the default prompt (if it exists)
+            if sections[0].strip() and not sections[0].startswith("TEMPLATE:"):
+                first_section = sections[0].strip()
+                if first_section.startswith("DEFAULT_PROMPT:"):
+                    config["default_prompt"] = first_section.replace("DEFAULT_PROMPT:", "").strip()
+                elif not first_section.startswith("TEMPLATE:"):
+                    # If first section doesn't have any prefix, it's the default
+                    config["default_prompt"] = first_section
+            
+            # Process template-specific prompts
+            for section in sections[1:]:  # Skip first section
+                if section.strip():
+                    lines = section.strip().split('\n', 1)
+                    if len(lines) >= 2:
+                        template_name = lines[0].strip()
+                        template_prompt = lines[1].strip()
+                        config["template_prompts"][template_name] = template_prompt
+                        st.success(f"Loaded custom prompt for: {template_name}")
+            
+            st.info(f"Successfully loaded prompt configuration from {config_file}")
+            return config
         else:
-            # Create default config file
-            with open(config_file, 'w', encoding='utf-8') as f:
-                json.dump(default_config, f, indent=2)
-            # st.info(f"Created default prompt configuration file: {config_file}")
+            st.warning(f"Could not find {config_file}. Using default prompt.")
             return default_config
+            
     except Exception as e:
-        st.warning(f"Could not load prompt config: {e}. Using default prompt.")
+        st.error(f"Error reading prompt config file: {e}")
+        st.info("Using default prompt instead.")
         return default_config
 
 def get_template_prompt(template_name, prompt_config):
     """Get the appropriate prompt for a template"""
     if template_name and template_name in prompt_config.get("template_prompts", {}):
-        st.info(f"Using custom prompt for template: {template_name}")
+        st.success(f"Using custom prompt for template: {template_name}")
         return prompt_config["template_prompts"][template_name]
     else:
         if template_name and template_name != "Upload my own template":
@@ -1207,4 +1228,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
