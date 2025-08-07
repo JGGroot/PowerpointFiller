@@ -70,6 +70,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- Analysis Functions ---
+
 def analyze_powerpoint_fields(uploaded_file):
     """(Corrected) Analyze PowerPoint file for field placeholders"""
     try:
@@ -144,15 +146,15 @@ def analyze_word_fields(uploaded_file):
         st.error(f"Error analyzing Word document: {e}")
         return [], []
 
+# --- Helper and Filling Functions ---
+
 def generate_ai_prompt(fields, project_data):
     """Generate AI prompt"""
     field_descriptions = [f"  - {field}" for field in sorted(fields)]
     
     prompt = f"""I need you to analyze project data and extract information for specific PowerPoint fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
-
 **PowerPoint Fields to Fill:**
 {chr(10).join(field_descriptions)}
-
 **Instructions:**
 1. Extract relevant information from the project data for each field
 2. If a field name suggests specific content (e.g., "commander_name" should be a person's name), extract accordingly
@@ -161,105 +163,90 @@ def generate_ai_prompt(fields, project_data):
 5. For fields with money, phone numbers, or other implied formatting, format the extracted values accordingly
 6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text
 7. Return ONLY the JSON object - no explanations or additional text
-
 **Project Data to Analyze:**
 {project_data}
-
 Please analyze the above data and return the JSON object with field values:"""
     
     return prompt
 
-def copy_run_formatting(source_run, target_run):
-    """Copy formatting between runs with enhanced error handling"""
-    try:
-        if hasattr(source_run.font, 'name') and source_run.font.name:
-            target_run.font.name = source_run.font.name
-        if hasattr(source_run.font, 'size') and source_run.font.size:
-            target_run.font.size = source_run.font.size
-        if hasattr(source_run.font, 'bold') and source_run.font.bold is not None:
-            target_run.font.bold = source_run.font.bold
-        if hasattr(source_run.font, 'italic') and source_run.font.italic is not None:
-            target_run.font.italic = source_run.font.italic
-        if hasattr(source_run.font, 'underline') and source_run.font.underline is not None:
-            target_run.font.underline = source_run.font.underline
-        
-        source_color = source_run.font.color
-        target_color = target_run.font.color
-        if hasattr(source_color, 'rgb') and source_color.rgb is not None:
-            target_color.rgb = source_color.rgb
-        elif hasattr(source_color, 'theme_color') and source_color.theme_color is not None:
-            target_color.theme_color = source_color.theme_color
-            if hasattr(source_color, 'brightness') and source_color.brightness is not None:
-                target_color.brightness = source_color.brightness
-    except:
-        pass
-
-def replace_text_preserve_formatting(paragraph, placeholder, replacement_text):
-    """Replace text while preserving formatting"""
-    if placeholder not in paragraph.text:
-        return False
-    reference_run = None
+def replace_text_in_paragraph(paragraph, key, value):
+    """(NEW) Replaces text in a paragraph, preserving formatting.
+    This is a robust function for both pptx and docx.
+    """
+    if key not in paragraph.text:
+        return
+    
+    # Replace the simple case
     for run in paragraph.runs:
-        if placeholder in run.text:
-            reference_run = run
-            break
-    if not reference_run:
-        for run in paragraph.runs:
-            if run.text.strip():
-                reference_run = run
-                break
-    if not reference_run:
-        reference_run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
+        if key in run.text:
+            run.text = run.text.replace(key, value)
+            return
 
-    new_text = paragraph.text.replace(placeholder, str(replacement_text))
-    paragraph.clear()
-    new_run = paragraph.add_run(new_text)
-    copy_run_formatting(reference_run, new_run)
-    return True
+    # Handle cases where the key is split across multiple runs
+    runs = paragraph.runs
+    full_text = "".join(run.text for run in runs)
+    if key in full_text:
+        start_index = full_text.find(key)
+        end_index = start_index + len(key)
+        
+        current_pos = 0
+        runs_to_modify = []
+        for run in runs:
+            run_len = len(run.text)
+            if current_pos < end_index and current_pos + run_len > start_index:
+                runs_to_modify.append(run)
+            current_pos += run_len
+        
+        if runs_to_modify:
+            # Replace text in the first run and clear others
+            original_text = "".join(run.text for run in runs_to_modify)
+            new_text = original_text.replace(key, value, 1)
+            runs_to_modify[0].text = new_text
+            for i in range(1, len(runs_to_modify)):
+                runs_to_modify[i].text = ""
 
 def fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container):
-    """Fill PowerPoint with data preserving formatting"""
+    """(CORRECTED) Fill PowerPoint with data preserving formatting."""
     replacements_made = 0
-    data = json_data
     if uploaded_image:
-        progress_container.info("🖼️ Processing image replacement...")
-        # Image replacement logic would go here
+        # Placeholder for image replacement logic
+        pass
+
     for slide in prs.slides:
         for shape in slide.shapes:
             if hasattr(shape, "text_frame") and shape.text_frame:
-                for para in shape.text_frame.paragraphs:
-                    for field, value in data.items():
+                for paragraph in shape.text_frame.paragraphs:
+                    for field, value in json_data.items():
                         placeholder = f"{{{{{field}}}}}"
-                        if placeholder in para.text:
-                            replace_text_preserve_formatting(para, placeholder, value)
-                            replacements_made += 1
+                        replace_text_in_paragraph(paragraph, placeholder, str(value))
+                        replacements_made += 1 # Count attempt
             elif shape.has_table:
                 for row in shape.table.rows:
                     for cell in row.cells:
-                        for para in cell.text_frame.paragraphs:
-                            for field, value in data.items():
+                        for paragraph in cell.text_frame.paragraphs:
+                            for field, value in json_data.items():
                                 placeholder = f"{{{{{field}}}}}"
-                                if placeholder in para.text:
-                                    replace_text_preserve_formatting(para, placeholder, value)
-                                    replacements_made += 1
+                                replace_text_in_paragraph(paragraph, placeholder, str(value))
+                                replacements_made += 1 # Count attempt
     return prs, replacements_made
 
 def fill_word_with_data(doc_file, data):
     """Fill a Word document with data, preserving formatting."""
     doc = docx.Document(doc_file)
-    replacements = {f"{{{{{key}}}}}": str(value) for key, value in data.items()}
-    for p in doc.paragraphs:
-        for key, value in replacements.items():
-            if key in p.text:
-                replace_text_preserve_formatting(p, key, value)
+    for paragraph in doc.paragraphs:
+        for field, value in data.items():
+            placeholder = f"{{{{{field}}}}}"
+            replace_text_in_paragraph(paragraph, placeholder, str(value))
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                for p in cell.paragraphs:
-                    for key, value in replacements.items():
-                        if key in p.text:
-                            replace_text_preserve_formatting(p, key, value)
+                for paragraph in cell.paragraphs:
+                    for field, value in data.items():
+                        placeholder = f"{{{{{field}}}}}"
+                        replace_text_in_paragraph(paragraph, placeholder, str(value))
     return doc
+
+# --- Main Application Logic ---
 
 def main():
     st.warning('**DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM**')
@@ -417,5 +404,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
