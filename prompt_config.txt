@@ -21,12 +21,12 @@ I need you to analyze project data and extract information for specific document
 Please analyze the above data and return the JSON object with field values
 
 ---TEMPLATE:MFR Template
-Focus on financial data and quarterly metrics. Extract budget figures, revenue, performance indicators.
+FocusTESTESTEST on financial data and quarterly metrics. Extract budget figures, revenue, performance indicators.
 **Fields:** {field_list}
 **Data:** {project_data}
 Emphasize financial terminology and quarterly comparisons.
 
----TEMPLATE:Project_OnePager
+---TEMPLATE:Project OnePager.pptx
 Military briefing format. Extract mission data, personnel info, operational details.
 **Fields:** {field_list}  
 **Project Data:** {project_data}
