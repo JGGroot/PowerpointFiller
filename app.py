@@ -422,7 +422,7 @@ def replace_text_in_paragraph(paragraph, key, value):
                 runs_to_modify[i].text = ""
 
 def fill_pdf_with_data(pdf_file, data):
-    """Fill PDF with data using PyMuPDF (fitz) with encryption handling"""
+    """Fill PDF with data using PyMuPDF (fitz) with robust font handling"""
     try:
         # Reset file pointer
         if hasattr(pdf_file, 'seek'):
@@ -446,7 +446,10 @@ def fill_pdf_with_data(pdf_file, data):
         field_pattern = r'\{\{([^}]+)\}\}'
         replacements_made = 0
         
-        # Method 1: Replace text content (for text-based PDFs)
+        # Safe font options in order of preference
+        safe_fonts = ["helv", "helvetica", "arial", "times-roman", "cour"]
+        
+        # Method 1: Replace text content (for text-based PDFs) with improved font handling
         for page_num in range(len(pdf_document)):
             page = pdf_document.load_page(page_num)
             
@@ -475,19 +478,107 @@ def fill_pdf_with_data(pdf_file, data):
                                     # Get the rectangle coordinates
                                     rect = fitz.Rect(span["bbox"])
                                     
-                                    # Remove the old text by adding a redaction
-                                    page.add_redact_annot(rect, fill=(1, 1, 1))
-                                    page.apply_redactions()
+                                    # Remove the old text by adding a white rectangle
+                                    page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1))
                                     
-                                    # Add the new text
-                                    page.insert_text(
-                                        rect.top_left,
-                                        modified_text,
-                                        fontsize=span.get("size", 12),
-                                        color=(0, 0, 0),
-                                        fontname=span.get("font", "helv")
-                                    )
-                                    replacements_made += 1
+                                    # Get original font properties
+                                    font_size = span.get("size", 12)
+                                    font_color = (0, 0, 0)  # Default to black
+                                    
+                                    # Try to use original font first, then fallback to safe fonts
+                                    font_name = span.get("font", "helv")
+                                    
+                                    # Clean up font name (remove encoding suffixes)
+                                    if "+" in font_name:
+                                        font_name = font_name.split("+")[-1]
+                                    font_name = font_name.lower().replace("-", "")
+                                    
+                                    # Try inserting text with different font strategies
+                                    text_inserted = False
+                                    
+                                    # Strategy 1: Try original font name
+                                    if not text_inserted:
+                                        try:
+                                            page.insert_text(
+                                                rect.top_left,
+                                                modified_text,
+                                                fontsize=font_size,
+                                                color=font_color,
+                                                fontname=font_name
+                                            )
+                                            text_inserted = True
+                                        except:
+                                            pass
+                                    
+                                    # Strategy 2: Try safe fonts
+                                    if not text_inserted:
+                                        for safe_font in safe_fonts:
+                                            try:
+                                                page.insert_text(
+                                                    rect.top_left,
+                                                    modified_text,
+                                                    fontsize=font_size,
+                                                    color=font_color,
+                                                    fontname=safe_font
+                                                )
+                                                text_inserted = True
+                                                break
+                                            except:
+                                                continue
+                                    
+                                    # Strategy 3: Use built-in font without specifying name
+                                    if not text_inserted:
+                                        try:
+                                            page.insert_text(
+                                                rect.top_left,
+                                                modified_text,
+                                                fontsize=font_size,
+                                                color=font_color
+                                            )
+                                            text_inserted = True
+                                        except:
+                                            pass
+                                    
+                                    # Strategy 4: Try with embedded font if available
+                                    if not text_inserted:
+                                        try:
+                                            # Get font list from the page
+                                            font_list = page.get_fonts()
+                                            if font_list:
+                                                # Use the first available font
+                                                font_ref = font_list[0][0]  # Font reference number
+                                                page.insert_text(
+                                                    rect.top_left,
+                                                    modified_text,
+                                                    fontsize=font_size,
+                                                    color=font_color,
+                                                    fontname=f"F{font_ref}"
+                                                )
+                                                text_inserted = True
+                                        except:
+                                            pass
+                                    
+                                    # Strategy 5: Last resort - use textbox instead of insert_text
+                                    if not text_inserted:
+                                        try:
+                                            # Adjust rectangle to be slightly larger
+                                            text_rect = fitz.Rect(rect.x0, rect.y0, rect.x0 + 200, rect.y1)
+                                            page.insert_textbox(
+                                                text_rect,
+                                                modified_text,
+                                                fontsize=font_size,
+                                                color=font_color,
+                                                fontname="helv"
+                                            )
+                                            text_inserted = True
+                                        except:
+                                            pass
+                                    
+                                    if text_inserted:
+                                        replacements_made += 1
+                                    else:
+                                        st.warning(f"Could not insert replacement text on page {page_num + 1} for field: {field}")
+                                        
                                 except Exception as text_error:
                                     st.warning(f"Could not replace text on page {page_num + 1}: {text_error}")
         
@@ -517,6 +608,7 @@ def fill_pdf_with_data(pdf_file, data):
             
             # If decryption successful, try form field filling
             if pdf_reader:
+                form_fields_found = 0
                 for page in pdf_reader.pages:
                     if '/Annots' in page:
                         annotations = page['/Annots']
@@ -537,7 +629,7 @@ def fill_pdf_with_data(pdf_file, data):
                                                     if '/V' in annotation:
                                                         annotation.update({PyPDF2.generic.NameObject('/V'): 
                                                                          PyPDF2.generic.TextStringObject(str(value))})
-                                                        replacements_made += 1
+                                                        form_fields_found += 1
                                 except Exception as form_error:
                                     # Skip problematic form fields
                                     continue
@@ -545,7 +637,7 @@ def fill_pdf_with_data(pdf_file, data):
                     pdf_writer.add_page(page)
                 
                 # If form fields were modified, use the form-filled version
-                if pdf_writer.pages:
+                if form_fields_found > 0:
                     form_output = io.BytesIO()
                     pdf_writer.write(form_output)
                     form_output.seek(0)
@@ -553,6 +645,7 @@ def fill_pdf_with_data(pdf_file, data):
                     # Close the original and reopen the form-filled version
                     pdf_document.close()
                     pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
+                    replacements_made += form_fields_found
         
         except Exception as e:
             st.warning(f"Form field filling encountered issues: {e}. Text replacement completed.")
@@ -561,6 +654,12 @@ def fill_pdf_with_data(pdf_file, data):
         output_buffer = io.BytesIO()
         pdf_document.save(output_buffer)
         pdf_document.close()
+        
+        # Provide detailed feedback
+        if replacements_made > 0:
+            st.success(f"✅ Successfully made {replacements_made} field replacements in the PDF!")
+        else:
+            st.warning("⚠️ No fields were replaced. Check that your field patterns match {{field_name}} format.")
         
         return output_buffer.getvalue(), replacements_made
         
