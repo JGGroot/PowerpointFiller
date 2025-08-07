@@ -4,3 +4,6 @@ Pillow>=9.0.0
 pandas>=1.5.0
 streamlit-clipboard
 python-docx
+PyMuPDF
+PyPDF2
+reportlab
