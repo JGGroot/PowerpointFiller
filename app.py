@@ -75,7 +75,7 @@ Please analyze the above data and return the JSON object with field values""",
             # Create default config file
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, indent=2)
-            st.info(f"Created default prompt configuration file: {config_file}")
+            # st.info(f"Created default prompt configuration file: {config_file}")
             return default_config
     except Exception as e:
         st.warning(f"Could not load prompt config: {e}. Using default prompt.")
@@ -1207,3 +1207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
