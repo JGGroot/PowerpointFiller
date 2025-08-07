@@ -216,6 +216,7 @@ def analyze_word_fields(uploaded_file):
     except Exception as e:
         st.error(f"Error analyzing Word document: {e}")
         return [], []
+
 # --- Helper and Filling Functions ---
 
 def generate_ai_prompt(fields, project_data):
@@ -483,80 +484,206 @@ def main():
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="step-container">', unsafe_allow_html=True)
-            st.markdown("### 📝 Step 2: Enter Your Applicable Data Or Text. This can be formatted in any way, stream of thought, lists, sentences, etc. The more you provide the better your result will be. Any field on your template that is not covered will be TBD")
-            project_data = st.text_area("Enter your data here:", height=200)
+            # Create tabs for AI Generation and Manual Entry
+            tab1, tab2 = st.tabs(["🤖 AI Generation", "✏️ Manual Entry"])
             
-            uploaded_image = None
-            if file_extension == 'pptx':
-                uploaded_image = st.file_uploader("Choose an image file (for PowerPoint only)", type=['png', 'jpg', 'jpeg'])
-                if uploaded_image:
-                    st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            if project_data.strip():
-                if st.button("🤖 Generate AI Prompt", type="primary"):
-                    st.session_state.ai_prompt = generate_ai_prompt(st.session_state.fields, project_data)
+            # AI Generation Tab
+            with tab1:
+                st.markdown('<div class="step-container">', unsafe_allow_html=True)
+                st.markdown("### 📝 Step 2: Enter Your Applicable Data Or Text. This can be formatted in any way, stream of thought, lists, sentences, etc. The more you provide the better your result will be. Any field on your template that is not covered will be TBD")
+                project_data = st.text_area("Enter your data here:", height=200)
                 
-                if st.session_state.ai_prompt:
-                    st.markdown('<div class="step-container">', unsafe_allow_html=True)
-                    st.markdown("### 📋 Step 3: Copy Prompt to AI")
-                    st.info("Copy this prompt and paste it into your preferred AI assistant.")
+                uploaded_image = None
+                if file_extension == 'pptx':
+                    uploaded_image = st.file_uploader("Choose an image file (for PowerPoint only)", type=['png', 'jpg', 'jpeg'])
+                    if uploaded_image:
+                        st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                if project_data.strip():
+                    if st.button("🤖 Generate AI Prompt", type="primary", key="ai_prompt_btn"):
+                        st.session_state.ai_prompt = generate_ai_prompt(st.session_state.fields, project_data)
                     
-                    with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
-                        st.code(st.session_state.ai_prompt, language="text")
+                    if st.session_state.ai_prompt:
+                        st.markdown('<div class="step-container">', unsafe_allow_html=True)
+                        st.markdown("### 📋 Step 3: Copy Prompt to AI")
+                        st.info("Copy this prompt and paste it into your preferred AI assistant.")
+                        
+                        with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
+                            st.code(st.session_state.ai_prompt, language="text")
+                        
+                        copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
+
+                        st.markdown("**Quick Link to AI Service:**")
+                        st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                        st.markdown('<div class="step-container">', unsafe_allow_html=True)
+                        st.markdown("### 🔄 Step 4: Paste AI Response & Generate")
+                        ai_response = st.text_area("Paste the AI's JSON response here:", height=150)
+
+                        if ai_response.strip():
+                            try:
+                                json_str_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                                if not json_str_match:
+                                    raise json.JSONDecodeError("No JSON object found", "", 0)
+                                json_data = json.loads(json_str_match.group(0))
+                                st.success("✅ Valid JSON detected!")
+
+                                if st.button("🚀 Generate Filled Document", type="primary", key="ai_generate_btn"):
+                                    progress_container = st.container()
+                                    with st.spinner('🔄 Filling template...'):
+                                        if hasattr(source_file, 'seek'):
+                                            source_file.seek(0)
+                                        
+                                        output_buffer = io.BytesIO()
+                                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                        
+                                        if file_extension == 'pptx':
+                                            prs = Presentation(source_file)
+                                            filled_doc, _ = fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container)
+                                            filled_doc.save(output_buffer)
+                                            download_filename = f"filled_presentation_{timestamp}.pptx"
+                                            mime_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                        elif file_extension == 'docx':
+                                            filled_doc = fill_word_with_data(source_file, json_data)
+                                            filled_doc.save(output_buffer)
+                                            download_filename = f"filled_document_{timestamp}.docx"
+                                            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                        
+                                        progress_container.success("✅ Document generated successfully!")
+                                        st.download_button(
+                                            label=f"📥 Download Filled {file_extension.upper()}",
+                                            data=output_buffer.getvalue(),
+                                            file_name=download_filename,
+                                            mime=mime_type
+                                        )
+                                        st.balloons()
+                            except json.JSONDecodeError as e:
+                                st.error(f"❌ Invalid JSON format: {e}")
+                        st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Manual Entry Tab
+            with tab2:
+                st.markdown('<div class="step-container">', unsafe_allow_html=True)
+                st.markdown("### ✏️ Manual Entry - Fill Fields Directly")
+                st.info(f"Found {len(st.session_state.fields)} fields to fill. Leave any field blank to keep the placeholder in the document.")
+                
+                # Initialize session state for manual entry if not exists
+                if 'manual_entry_data' not in st.session_state:
+                    st.session_state.manual_entry_data = {}
+                
+                # Create input fields for each found field
+                st.markdown("**Fill in the fields below:**")
+                
+                # Split fields into two columns
+                col1, col2 = st.columns(2)
+                fields_per_column = (len(st.session_state.fields) + 1) // 2
+                
+                with col1:
+                    for field in st.session_state.fields[:fields_per_column]:
+                        # Use session state to preserve values
+                        if field not in st.session_state.manual_entry_data:
+                            st.session_state.manual_entry_data[field] = ""
+                        
+                        st.session_state.manual_entry_data[field] = st.text_input(
+                            f"**{field}**",
+                            value=st.session_state.manual_entry_data[field],
+                            key=f"manual_field_{field}_1",
+                            help=f"Enter value for {{{{ {field} }}}}"
+                        )
+                
+                with col2:
+                    for field in st.session_state.fields[fields_per_column:]:
+                        # Use session state to preserve values
+                        if field not in st.session_state.manual_entry_data:
+                            st.session_state.manual_entry_data[field] = ""
+                        
+                        st.session_state.manual_entry_data[field] = st.text_input(
+                            f"**{field}**",
+                            value=st.session_state.manual_entry_data[field],
+                            key=f"manual_field_{field}_2",
+                            help=f"Enter value for {{{{ {field} }}}}"
+                        )
+                
+                # Add utility buttons and generation
+                st.markdown("---")
+                col_clear, col_preview, col_generate = st.columns(3)
+                
+                with col_clear:
+                    if st.button("🗑️ Clear All Fields", help="Clear all entered data"):
+                        for field in st.session_state.fields:
+                            st.session_state.manual_entry_data[field] = ""
+                        st.rerun()
+                
+                with col_preview:
+                    # Show preview of filled vs empty fields
+                    filled_count = sum(1 for field in st.session_state.fields 
+                                     if st.session_state.manual_entry_data.get(field, "").strip())
+                    st.metric("Fields to Fill", f"{filled_count}/{len(st.session_state.fields)}")
+                
+                with col_generate:
+                    if st.button("🚀 Generate Document", type="primary", key="manual_generate_btn"):
+                        # Prepare data dictionary, excluding empty fields
+                        manual_data = {}
+                        filled_count = 0
+                        
+                        for field in st.session_state.fields:
+                            value = st.session_state.manual_entry_data.get(field, "").strip()
+                            if value:  # Only include non-empty fields
+                                manual_data[field] = value
+                                filled_count += 1
+                        
+                        st.info(f"Filling {filled_count} out of {len(st.session_state.fields)} fields. Empty fields will remain as placeholders.")
+                        
+                        progress_container = st.container()
+                        with st.spinner('🔄 Generating document with manual entry...'):
+                            if hasattr(source_file, 'seek'):
+                                source_file.seek(0)
+                            
+                            output_buffer = io.BytesIO()
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            
+                            if file_extension == 'pptx':
+                                prs = Presentation(source_file)
+                                filled_doc, _ = fill_powerpoint_with_data(prs, manual_data, None, progress_container)
+                                filled_doc.save(output_buffer)
+                                download_filename = f"manual_filled_presentation_{timestamp}.pptx"
+                                mime_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            elif file_extension == 'docx':
+                                filled_doc = fill_word_with_data(source_file, manual_data)
+                                filled_doc.save(output_buffer)
+                                download_filename = f"manual_filled_document_{timestamp}.docx"
+                                mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            
+                            progress_container.success("✅ Document generated successfully with manual entry!")
+                            st.download_button(
+                                label=f"📥 Download Manual Filled {file_extension.upper()}",
+                                data=output_buffer.getvalue(),
+                                file_name=download_filename,
+                                mime=mime_type
+                            )
+                            st.balloons()
+                
+                # Show a detailed preview of what will be filled
+                with st.expander("📋 Preview of Field Mappings", expanded=False):
+                    preview_data = []
+                    for field in sorted(st.session_state.fields):
+                        value = st.session_state.manual_entry_data.get(field, "").strip()
+                        status = "✅ Will be filled" if value else "⚪ Will remain as placeholder"
+                        preview_data.append({
+                            "Field": f"{{{{{field}}}}}",
+                            "Value": value if value else "(empty)",
+                            "Status": status
+                        })
                     
-                    copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
+                    if preview_data:
+                        preview_df = pd.DataFrame(preview_data)
+                        st.dataframe(preview_df, use_container_width=True, hide_index=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
 
-                    st.markdown("**Quick Link to AI Service:**")
-                    st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                    st.markdown('<div class="step-container">', unsafe_allow_html=True)
-                    st.markdown("### 🔄 Step 4: Paste AI Response & Generate")
-                    ai_response = st.text_area("Paste the AI's JSON response here:", height=150)
-
-                    if ai_response.strip():
-                        try:
-                            json_str_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
-                            if not json_str_match:
-                                raise json.JSONDecodeError("No JSON object found", "", 0)
-                            json_data = json.loads(json_str_match.group(0))
-                            st.success("✅ Valid JSON detected!")
-
-                            if st.button("🚀 Generate Filled Document", type="primary"):
-                                progress_container = st.container()
-                                with st.spinner('🔄 Filling template...'):
-                                    if hasattr(source_file, 'seek'):
-                                        source_file.seek(0)
-                                    
-                                    output_buffer = io.BytesIO()
-                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                    
-                                    if file_extension == 'pptx':
-                                        prs = Presentation(source_file)
-                                        filled_doc, _ = fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container)
-                                        filled_doc.save(output_buffer)
-                                        download_filename = f"filled_presentation_{timestamp}.pptx"
-                                        mime_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                                    elif file_extension == 'docx':
-                                        filled_doc = fill_word_with_data(source_file, json_data)
-                                        filled_doc.save(output_buffer)
-                                        download_filename = f"filled_document_{timestamp}.docx"
-                                        mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                    
-                                    progress_container.success("✅ Document generated successfully!")
-                                    st.download_button(
-                                        label=f"📥 Download Filled {file_extension.upper()}",
-                                        data=output_buffer.getvalue(),
-                                        file_name=download_filename,
-                                        mime=mime_type
-                                    )
-                                    st.balloons()
-                        except json.JSONDecodeError as e:
-                            st.error(f"❌ Invalid JSON format: {e}")
-                    st.markdown('</div>', unsafe_allow_html=True)
         elif source_file is not None:
             st.markdown('<div class="warning-box">', unsafe_allow_html=True)
             st.warning("⚠️ No {{field_name}} placeholders found in your template!")
@@ -571,12 +698,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
