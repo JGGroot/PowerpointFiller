@@ -422,171 +422,16 @@ def replace_text_in_paragraph(paragraph, key, value):
                 runs_to_modify[i].text = ""
 
 def fill_pdf_with_data(pdf_file, data):
-    """Fill PDF with data using PyMuPDF (fitz) with robust font handling"""
+    """Fill PDF with data - prioritizing form field filling over text replacement"""
     try:
         # Reset file pointer
         if hasattr(pdf_file, 'seek'):
             pdf_file.seek(0)
         
-        pdf_bytes = pdf_file.read()
-        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
-        # Handle password-protected PDFs
-        if pdf_document.needs_pass:
-            if 'pdf_password' in st.session_state and st.session_state.pdf_password:
-                if not pdf_document.authenticate(st.session_state.pdf_password):
-                    st.error("Cannot fill PDF: Authentication failed")
-                    pdf_document.close()
-                    return None, 0
-            else:
-                st.error("Cannot fill encrypted PDF without password")
-                pdf_document.close()
-                return None, 0
-        
-        field_pattern = r'\{\{([^}]+)\}\}'
         replacements_made = 0
         
-        # Safe font options in order of preference
-        safe_fonts = ["helv", "helvetica", "arial", "times-roman", "cour"]
-        
-        # Method 1: Replace text content (for text-based PDFs) with improved font handling
-        for page_num in range(len(pdf_document)):
-            page = pdf_document.load_page(page_num)
-            
-            # Get all text instances with their positions
-            text_instances = page.get_text("dict")
-            
-            # Look for and replace field patterns
-            for block in text_instances["blocks"]:
-                if "lines" in block:
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            text = span.get("text", "")
-                            
-                            # Check if this text contains any of our fields
-                            original_text = text
-                            modified_text = text
-                            
-                            for field, value in data.items():
-                                placeholder = f"{{{{{field}}}}}"
-                                if placeholder in modified_text:
-                                    modified_text = modified_text.replace(placeholder, str(value))
-                            
-                            # If text was modified, replace it
-                            if modified_text != original_text:
-                                try:
-                                    # Get the rectangle coordinates
-                                    rect = fitz.Rect(span["bbox"])
-                                    
-                                    # Remove the old text by adding a white rectangle
-                                    page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1))
-                                    
-                                    # Get original font properties
-                                    font_size = span.get("size", 12)
-                                    font_color = (0, 0, 0)  # Default to black
-                                    
-                                    # Try to use original font first, then fallback to safe fonts
-                                    font_name = span.get("font", "helv")
-                                    
-                                    # Clean up font name (remove encoding suffixes)
-                                    if "+" in font_name:
-                                        font_name = font_name.split("+")[-1]
-                                    font_name = font_name.lower().replace("-", "")
-                                    
-                                    # Try inserting text with different font strategies
-                                    text_inserted = False
-                                    
-                                    # Strategy 1: Try original font name
-                                    if not text_inserted:
-                                        try:
-                                            page.insert_text(
-                                                rect.top_left,
-                                                modified_text,
-                                                fontsize=font_size,
-                                                color=font_color,
-                                                fontname=font_name
-                                            )
-                                            text_inserted = True
-                                        except:
-                                            pass
-                                    
-                                    # Strategy 2: Try safe fonts
-                                    if not text_inserted:
-                                        for safe_font in safe_fonts:
-                                            try:
-                                                page.insert_text(
-                                                    rect.top_left,
-                                                    modified_text,
-                                                    fontsize=font_size,
-                                                    color=font_color,
-                                                    fontname=safe_font
-                                                )
-                                                text_inserted = True
-                                                break
-                                            except:
-                                                continue
-                                    
-                                    # Strategy 3: Use built-in font without specifying name
-                                    if not text_inserted:
-                                        try:
-                                            page.insert_text(
-                                                rect.top_left,
-                                                modified_text,
-                                                fontsize=font_size,
-                                                color=font_color
-                                            )
-                                            text_inserted = True
-                                        except:
-                                            pass
-                                    
-                                    # Strategy 4: Try with embedded font if available
-                                    if not text_inserted:
-                                        try:
-                                            # Get font list from the page
-                                            font_list = page.get_fonts()
-                                            if font_list:
-                                                # Use the first available font
-                                                font_ref = font_list[0][0]  # Font reference number
-                                                page.insert_text(
-                                                    rect.top_left,
-                                                    modified_text,
-                                                    fontsize=font_size,
-                                                    color=font_color,
-                                                    fontname=f"F{font_ref}"
-                                                )
-                                                text_inserted = True
-                                        except:
-                                            pass
-                                    
-                                    # Strategy 5: Last resort - use textbox instead of insert_text
-                                    if not text_inserted:
-                                        try:
-                                            # Adjust rectangle to be slightly larger
-                                            text_rect = fitz.Rect(rect.x0, rect.y0, rect.x0 + 200, rect.y1)
-                                            page.insert_textbox(
-                                                text_rect,
-                                                modified_text,
-                                                fontsize=font_size,
-                                                color=font_color,
-                                                fontname="helv"
-                                            )
-                                            text_inserted = True
-                                        except:
-                                            pass
-                                    
-                                    if text_inserted:
-                                        replacements_made += 1
-                                    else:
-                                        st.warning(f"Could not insert replacement text on page {page_num + 1} for field: {field}")
-                                        
-                                except Exception as text_error:
-                                    st.warning(f"Could not replace text on page {page_num + 1}: {text_error}")
-        
-        # Method 2: Try to handle form fields (if it's a fillable PDF)
+        # Method 1: Try form field filling first (this is the proper way for Acrobat forms)
         try:
-            if hasattr(pdf_file, 'seek'):
-                pdf_file.seek(0)
-            
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             pdf_writer = PyPDF2.PdfWriter()
             
@@ -601,14 +446,33 @@ def fill_pdf_with_data(pdf_file, data):
                         try:
                             pdf_reader.decrypt(st.session_state.pdf_password)
                         except:
-                            st.warning("Could not decrypt PDF for form field filling. Text replacement completed.")
+                            st.warning("Could not decrypt PDF for form field filling.")
                             pdf_reader = None
                     else:
                         pdf_reader = None
             
-            # If decryption successful, try form field filling
+            form_fields_filled = 0
+            all_form_fields = set()
+            
             if pdf_reader:
-                form_fields_found = 0
+                # First pass: collect all form field names
+                for page in pdf_reader.pages:
+                    if '/Annots' in page:
+                        annotations = page['/Annots']
+                        if annotations:
+                            for annotation_ref in annotations:
+                                try:
+                                    annotation = annotation_ref.get_object()
+                                    if annotation.get('/Subtype') == '/Widget':
+                                        field_name = annotation.get('/T')
+                                        if field_name:
+                                            all_form_fields.add(str(field_name))
+                                except:
+                                    continue
+                
+                st.info(f"Found {len(all_form_fields)} form fields in PDF: {list(all_form_fields)}")
+                
+                # Second pass: fill form fields
                 for page in pdf_reader.pages:
                     if '/Annots' in page:
                         annotations = page['/Annots']
@@ -622,46 +486,145 @@ def fill_pdf_with_data(pdf_file, data):
                                             field_name_str = str(field_name)
                                             
                                             # Check if we have data for this field
+                                            field_filled = False
                                             for field, value in data.items():
+                                                # Direct match
+                                                if field == field_name_str:
+                                                    annotation.update({
+                                                        PyPDF2.generic.NameObject('/V'): 
+                                                        PyPDF2.generic.TextStringObject(str(value))
+                                                    })
+                                                    form_fields_filled += 1
+                                                    field_filled = True
+                                                    st.success(f"✅ Filled form field '{field_name_str}' with '{value}'")
+                                                    break
+                                                
+                                                # Pattern match {{field_name}}
                                                 placeholder = f"{{{{{field}}}}}"
-                                                if placeholder in field_name_str or field == field_name_str:
-                                                    # Update form field value
-                                                    if '/V' in annotation:
-                                                        annotation.update({PyPDF2.generic.NameObject('/V'): 
-                                                                         PyPDF2.generic.TextStringObject(str(value))})
-                                                        form_fields_found += 1
+                                                if placeholder in field_name_str:
+                                                    annotation.update({
+                                                        PyPDF2.generic.NameObject('/V'): 
+                                                        PyPDF2.generic.TextStringObject(str(value))
+                                                    })
+                                                    form_fields_filled += 1
+                                                    field_filled = True
+                                                    st.success(f"✅ Filled form field '{field_name_str}' with '{value}' (pattern match)")
+                                                    break
+                                            
+                                            if not field_filled:
+                                                st.info(f"ℹ️ Form field '{field_name_str}' - no matching data found")
+                                                
                                 except Exception as form_error:
-                                    # Skip problematic form fields
+                                    st.warning(f"Could not process form field: {form_error}")
                                     continue
                     
                     pdf_writer.add_page(page)
                 
-                # If form fields were modified, use the form-filled version
-                if form_fields_found > 0:
+                if form_fields_filled > 0:
+                    # Form fields were filled successfully
                     form_output = io.BytesIO()
                     pdf_writer.write(form_output)
-                    form_output.seek(0)
-                    
-                    # Close the original and reopen the form-filled version
-                    pdf_document.close()
-                    pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
-                    replacements_made += form_fields_found
+                    replacements_made = form_fields_filled
+                    st.success(f"✅ Successfully filled {form_fields_filled} form fields using proper PDF form filling!")
+                    return form_output.getvalue(), replacements_made
+                else:
+                    st.warning("⚠️ No form fields matched your data. Will try text-based replacement as fallback.")
         
         except Exception as e:
-            st.warning(f"Form field filling encountered issues: {e}. Text replacement completed.")
+            st.warning(f"Form field filling failed: {e}. Trying text replacement fallback.")
         
-        # Save the modified PDF
-        output_buffer = io.BytesIO()
-        pdf_document.save(output_buffer)
-        pdf_document.close()
+        # Method 2: Fallback to text replacement (only if form filling failed)
+        try:
+            if hasattr(pdf_file, 'seek'):
+                pdf_file.seek(0)
+            
+            pdf_bytes = pdf_file.read()
+            pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            
+            # Handle password-protected PDFs
+            if pdf_document.needs_pass:
+                if 'pdf_password' in st.session_state and st.session_state.pdf_password:
+                    if not pdf_document.authenticate(st.session_state.pdf_password):
+                        st.error("Cannot fill PDF: Authentication failed")
+                        pdf_document.close()
+                        return None, 0
+                else:
+                    st.error("Cannot fill encrypted PDF without password")
+                    pdf_document.close()
+                    return None, 0
+            
+            field_pattern = r'\{\{([^}]+)\}\}'
+            text_replacements = 0
+            
+            # Only do text replacement if no form fields were found
+            for page_num in range(len(pdf_document)):
+                page = pdf_document.load_page(page_num)
+                
+                # Get all text instances with their positions
+                text_instances = page.get_text("dict")
+                
+                # Look for field patterns in text
+                text_found = False
+                for block in text_instances["blocks"]:
+                    if "lines" in block:
+                        for line in block["lines"]:
+                            for span in line["spans"]:
+                                text = span.get("text", "")
+                                for field, value in data.items():
+                                    placeholder = f"{{{{{field}}}}}"
+                                    if placeholder in text:
+                                        text_found = True
+                                        break
+                
+                if text_found:
+                    st.info(f"Found {{field}} patterns in text on page {page_num + 1}. Using text replacement.")
+                    
+                    # Process text replacements with careful positioning
+                    for block in text_instances["blocks"]:
+                        if "lines" in block:
+                            for line in block["lines"]:
+                                for span in line["spans"]:
+                                    text = span.get("text", "")
+                                    original_text = text
+                                    modified_text = text
+                                    
+                                    for field, value in data.items():
+                                        placeholder = f"{{{{{field}}}}}"
+                                        if placeholder in modified_text:
+                                            modified_text = modified_text.replace(placeholder, str(value))
+                                    
+                                    if modified_text != original_text:
+                                        try:
+                                            rect = fitz.Rect(span["bbox"])
+                                            font_size = span.get("size", 12)
+                                            
+                                            # More gentle approach: just overlay the text without white box
+                                            page.insert_text(
+                                                rect.top_left,
+                                                modified_text,
+                                                fontsize=font_size,
+                                                color=(0, 0, 0),
+                                                fontname="helv"  # Use safe font
+                                            )
+                                            text_replacements += 1
+                                            
+                                        except Exception as text_error:
+                                            st.warning(f"Could not replace text: {text_error}")
+            
+            if text_replacements > 0:
+                output_buffer = io.BytesIO()
+                pdf_document.save(output_buffer)
+                pdf_document.close()
+                st.success(f"✅ Made {text_replacements} text replacements (fallback method)")
+                return output_buffer.getvalue(), text_replacements
+            else:
+                pdf_document.close()
+                st.warning("⚠️ No field patterns found in PDF text or form fields.")
+                
+        except Exception as e:
+            st.error(f"Text replacement also failed: {str(e)}")
         
-        # Provide detailed feedback
-        if replacements_made > 0:
-            st.success(f"✅ Successfully made {replacements_made} field replacements in the PDF!")
-        else:
-            st.warning("⚠️ No fields were replaced. Check that your field patterns match {{field_name}} format.")
-        
-        return output_buffer.getvalue(), replacements_made
+        return None, 0
         
     except Exception as e:
         st.error(f"Error filling PDF: {str(e)}")
