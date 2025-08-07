@@ -479,23 +479,23 @@ def main():
                 st.error("Unsupported file type.")
                 return
 
-        if st.session_state.fields:
-            st.markdown('<div class="success-box">', unsafe_allow_html=True)
-            st.success(f"Found {len(st.session_state.fields)} placeholders in '{filename}'!")
-            
-            with st.expander("Click to see found fields and their locations"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Found Fields:**")
-                    st.write(st.session_state.fields)
-                with col2:
-                    st.write("**Field Locations (PowerPoint only):**")
-                    if file_extension == 'pptx' and st.session_state.field_locations:
-                        st.write(st.session_state.field_locations)
-                    else:
-                        st.write("Location data is not available for Word documents.")
-
-            st.markdown('</div>', unsafe_allow_html=True)
+#        if st.session_state.fields:
+#            st.markdown('<div class="success-box">', unsafe_allow_html=True)
+#            st.success(f"Found {len(st.session_state.fields)} placeholders in '{filename}'!")
+#            
+          #  with st.expander("Click to see found fields and their locations"):
+         #       col1, col2 = st.columns(2)
+        #        with col1:
+       #             st.write("**Found Fields:**")
+      #              st.write(st.session_state.fields)
+     #           with col2:
+    #                st.write("**Field Locations (PowerPoint only):**")
+   #                 if file_extension == 'pptx' and st.session_state.field_locations:
+  #                      st.write(st.session_state.field_locations)
+  #                  else:
+ #                       st.write("Location data is not available for Word documents.")
+#
+#            st.markdown('</div>', unsafe_allow_html=True)
 
             # Create tabs for AI Generation and Manual Entry
             tab1, tab2 = st.tabs(["🤖 AI Generation", "✏️ Manual Entry"])
@@ -712,3 +712,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
