@@ -411,15 +411,20 @@ def create_download_link(data, filename):
     return href
 
 def main():
+    # --- NEW: Banners at the very top ---
+    st.warning('**DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM**')
+    
+    try:
+        st.image("banner.png", use_column_width='always')
+    except Exception as e:
+        # This will prevent the app from crashing if the banner.png is not found
+        st.info("Info: `banner.png` not found. Skipping image banner.")
+
     # Header
     st.markdown('<div class="main-header">📊 PowerPoint AI Field Filler</div>', unsafe_allow_html=True)
     
-    # --- NEW: Warning Banner ---
-    st.warning("DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM")
-    
     st.markdown("**Transform your PowerPoint templates with AI-powered data filling!**")
-    
-    # Initialize session state
+
     if 'fields' not in st.session_state:
         st.session_state.fields = []
     if 'field_locations' not in st.session_state:
@@ -618,6 +623,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
