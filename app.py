@@ -414,10 +414,11 @@ def main():
     # --- NEW: Banners at the very top ---
     st.warning('**DO NOT ENTER CONTROLLED UNCLASSIFIED INFORMATION INTO THIS SYSTEM**')
     
+    # CORRECTED CODE
     try:
-        st.image("banner.png", use_column_width='always')
+        st.image("banner.png", use_container_width=True)
     except Exception as e:
-        # This will prevent the app from crashing if the banner.png is not found
+    # This will prevent the app from crashing if the banner.png is not found
         st.info("Info: `banner.png` not found. Skipping image banner.")
 
     # Header
@@ -623,6 +624,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
