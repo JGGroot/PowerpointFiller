@@ -425,7 +425,6 @@ def main():
     # Find templates in the /templates directory
     try:
         template_files = glob.glob("templates/*.*")
-        # Prepend the "Upload" option to the list of found templates
         template_options = ["Upload my own template"] + template_files
     except Exception as e:
         st.error(f"Could not scan templates directory: {e}")
@@ -450,7 +449,6 @@ def main():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # This block now runs if a template was selected OR a file was uploaded
     if source_file is not None:
         # Get the filename whether it's an uploaded file or a path string
         filename = source_file.name if hasattr(source_file, 'name') else source_file
@@ -469,17 +467,45 @@ def main():
             st.markdown('<div class="success-box">', unsafe_allow_html=True)
             st.success(f"Found {len(st.session_state.fields)} placeholders in '{filename}'!")
             
-            # --- The rest of the app logic (Steps 2, 3, 4) remains the same ---
-            # --- It will now work with either the uploaded file or the selected template ---
-            
             with st.expander("Click to see found fields and their locations"):
-                # ... (code to display fields remains the same) ...
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Found Fields:**")
+                    for field in sorted(st.session_state.fields):
+                        st.write(f"• `{{{{{field}}}}}`")
+                
+                with col2:
+                    st.write("**Field Locations (PowerPoint only):**")
+                    if file_extension == 'pptx' and st.session_state.field_locations:
+                        for loc in st.session_state.field_locations[:5]:
+                            st.write(f"• `{{{{{loc['field']}}}}}` on Slide {loc['slide']}")
+                        if len(st.session_state.field_locations) > 5:
+                            st.write(f"... and {len(st.session_state.field_locations) - 5} more")
+                    else:
+                        st.write("Location data is not available for Word documents.")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Step 2: Project Data Input
             st.markdown('<div class="step-container">', unsafe_allow_html=True)
-            # ... (Project Data, Image Upload code remains the same) ...
+            st.markdown("### 📝 Step 2: Enter Your Project Data")
+            
+            project_data = st.text_area(
+                "Paste your raw project data here:",
+                height=200,
+                placeholder="Enter your project details, requirements, team information, etc."
+            )
+            
+            if file_extension == 'pptx': # Only show image uploader for PowerPoint
+                uploaded_image = st.file_uploader(
+                    "Choose an image file (for PowerPoint only)",
+                    type=['png', 'jpg', 'jpeg', 'gif', 'bmp']
+                )
+                if uploaded_image:
+                    st.image(uploaded_image, caption="Uploaded Image Preview", width=200)
+            else:
+                uploaded_image = None
+
             st.markdown('</div>', unsafe_allow_html=True)
 
             if project_data.strip():
@@ -489,26 +515,48 @@ def main():
                 if st.session_state.ai_prompt:
                     # Step 3: AI Prompt
                     st.markdown('<div class="step-container">', unsafe_allow_html=True)
-                    # ... (AI Prompt display, copy button, NiprGPT link remains the same) ...
+                    st.markdown("### 📋 Step 3: Copy Prompt to AI")
+                    st.info("Copy this prompt and paste it into your preferred AI assistant.")
+                    
+                    with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
+                        st.code(st.session_state.ai_prompt, language="text")
+                    
+                    copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
+
+                    st.markdown("**Quick Link to AI Service:**")
+                    st.markdown(
+                        f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>',
+                        unsafe_allow_html=True
+                    )
                     st.markdown('</div>', unsafe_allow_html=True)
 
                     # Step 4: AI Response & Document Generation
                     st.markdown('<div class="step-container">', unsafe_allow_html=True)
-                    # ... (AI Response text area remains the same) ...
+                    st.markdown("### 🔄 Step 4: Paste AI Response & Generate")
+                    
+                    ai_response = st.text_area(
+                        "Paste the AI's JSON response here:",
+                        height=150,
+                        placeholder='{"project_title": "Your Project", ...}'
+                    )
+
                     if ai_response.strip():
                         try:
-                            # ... (JSON validation remains the same) ...
+                            json_str_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                            if not json_str_match:
+                                raise json.JSONDecodeError("No JSON object found in the response.", ai_response, 0)
+                            json_data = json.loads(json_str_match.group(0))
+                            st.success("✅ Valid JSON detected!")
 
                             if st.button("🚀 Generate Filled Document", type="primary"):
                                 progress_container = st.container()
                                 with st.spinner('🔄 Filling template...'):
-                                    # We don't need to seek(0) for file paths, only for uploaded files
                                     if hasattr(source_file, 'seek'):
                                         source_file.seek(0)
                                     
                                     output_buffer = io.BytesIO()
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
+                                    
                                     if file_extension == 'pptx':
                                         prs = Presentation(source_file)
                                         filled_doc, replacements = fill_powerpoint_with_data(prs, json_data, uploaded_image, progress_container)
@@ -550,6 +598,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
