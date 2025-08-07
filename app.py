@@ -15,11 +15,10 @@ from clipboard_component import copy_component, paste_component
 st.set_page_config(
     page_title="PowerPoint AI Field Filler",
     page_icon="📊",
-    layout="wide",
+    layout="centered", # <-- This is the only change needed
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
 # Custom CSS for better styling
 st.markdown("""
 <style>
@@ -624,6 +623,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
