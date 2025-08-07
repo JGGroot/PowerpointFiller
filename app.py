@@ -35,7 +35,7 @@ st.markdown("""
         border-radius: 10px;
     }
     .step-container {
-        background: #f8f9fa;
+        background: #330066;
         padding: 20px;
         border-radius: 10px;
         margin: 20px 0;
@@ -410,4 +410,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
