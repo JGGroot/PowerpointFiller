@@ -154,18 +154,24 @@ def generate_ai_prompt(fields, project_data):
     
     prompt = f"""I need you to analyze project data and extract information for specific PowerPoint fields. Return ONLY a valid JSON object with the field names as keys and extracted values as values.
 **PowerPoint Fields to Fill:**
+
 {chr(10).join(field_descriptions)}
+
 **Instructions:**
-1. Extract relevant information from the project data for each field
+
+1. Extract relevant information from the data for each field
 2. If a field name suggests specific content (e.g., "commander_name" should be a person's name), extract accordingly
-3. Keep values concise but informative - suitable for presentation slides
+3. Be clear, professional, and concise. You are drafting documents for official government use so no slang etc. 
 4. Conduct market research with a focus on Department of Defense, Department of the Air Force, and with the goals of the 100th ARW and 352nd SOW mission goals in mind
 5. For fields with money, phone numbers, or other implied formatting, format the extracted values accordingly
-6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text
+6. For fields you can't determine from the data, use "TBD" or leave reasonable placeholder text based on context
 7. Return ONLY the JSON object - no explanations or additional text
+
 **Project Data to Analyze:**
+
 {project_data}
-Please analyze the above data and return the JSON object with field values:"""
+
+Please analyze the above data and return the JSON object with field values"""
     
     return prompt
 
@@ -256,7 +262,7 @@ def main():
         st.info("Info: `banner.png` not found. Skipping image banner.")
 
     st.markdown('<div class="main-header">📊 Document AI Field Filler</div>', unsafe_allow_html=True)
-    st.markdown("**Transform your templates with AI-powered data filling!**")
+    st.markdown("**Transform your templates with AI-powered data filling! This tool will take unformatted data and conduct research, formatting, organization, data extraction, and place it in a pre-made template or bring your own!**")
 
     if 'fields' not in st.session_state:
         st.session_state.fields = []
@@ -404,3 +410,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
