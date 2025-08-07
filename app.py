@@ -106,6 +106,56 @@ def analyze_word_fields(uploaded_file):
     except Exception as e:
         st.error(f"Error analyzing Word document: {e}")
         return [], [] # IMPORTANT: Always return two empty lists on failure
+
+# Replace your entire old function with this corrected version
+def analyze_powerpoint_fields(uploaded_file):
+    """(Corrected) Analyze PowerPoint file for field placeholders"""
+    try:
+        prs = Presentation(uploaded_file)
+        found_fields = set()
+        field_locations = []
+        
+        for slide_num, slide in enumerate(prs.slides, 1):
+            for shape in slide.shapes:
+                if hasattr(shape, "text_frame") and shape.text_frame and shape.text_frame.text:
+                    text_content = shape.text_frame.text
+                    field_pattern = r'\{\{([^}]+)\}\}'
+                    matches = re.findall(field_pattern, text_content)
+                    
+                    for field in matches:
+                        found_fields.add(field)
+                        field_locations.append({
+                            'field': field,
+                            'slide': slide_num,
+                            'context': text_content[:100] + '...' if len(text_content) > 100 else text_content
+                        })
+                
+                elif shape.has_table:
+                    table = shape.table
+                    for row_num, row in enumerate(table.rows):
+                        for cell_num, cell in enumerate(row.cells):
+                            if cell.text:
+                                text_content = cell.text
+                                field_pattern = r'\{\{([^}]+)\}\}'
+                                matches = re.findall(field_pattern, text_content)
+                                
+                                for field in matches:
+                                    found_fields.add(field)
+                                    field_locations.append({
+                                        'field': field,
+                                        'slide': slide_num,
+                                        'location': f'Table R{row_num+1}C{cell_num+1}',
+                                        'context': text_content[:50] + '...' if len(text_content) > 50 else text_content
+                                    })
+        
+        return list(found_fields), field_locations
+
+    except Exception as e:
+        st.error(f"Error analyzing PowerPoint: {str(e)}")
+        # IMPORTANT: Always return two values, even on failure
+        return [], []
+
+
 def generate_ai_prompt(fields, project_data):
     """Generate AI prompt"""
     field_descriptions = [f"  - {field}" for field in sorted(fields)]
@@ -598,6 +648,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
