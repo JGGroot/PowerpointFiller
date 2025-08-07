@@ -521,12 +521,55 @@ def fill_pdf_with_data(pdf_file, data):
                     pdf_writer.add_page(page)
                 
                 if form_fields_filled > 0:
-                    # Form fields were filled successfully
+                    # Form fields were filled, now also remove any {{placeholder}} text that might be visible
                     form_output = io.BytesIO()
                     pdf_writer.write(form_output)
+                    form_output.seek(0)
+                    
+                    # Now process with PyMuPDF to remove placeholder text
+                    pdf_document = fitz.open(stream=form_output.getvalue(), filetype="pdf")
+                    
+                    # Handle password-protected PDFs for text removal
+                    if pdf_document.needs_pass:
+                        if 'pdf_password' in st.session_state and st.session_state.pdf_password:
+                            if not pdf_document.authenticate(st.session_state.pdf_password):
+                                st.warning("Could not authenticate PDF for placeholder text removal")
+                            else:
+                                # Remove placeholder text that might still be visible
+                                text_removed = 0
+                                field_pattern = r'\{\{([^}]+)\}\}'
+                                
+                                for page_num in range(len(pdf_document)):
+                                    page = pdf_document.load_page(page_num)
+                                    text_instances = page.get_text("dict")
+                                    
+                                    for block in text_instances["blocks"]:
+                                        if "lines" in block:
+                                            for line in block["lines"]:
+                                                for span in line["spans"]:
+                                                    text = span.get("text", "")
+                                                    
+                                                    # Check if this text contains placeholder patterns
+                                                    if re.search(field_pattern, text):
+                                                        try:
+                                                            # Remove the placeholder text by covering with white
+                                                            rect = fitz.Rect(span["bbox"])
+                                                            page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1))
+                                                            text_removed += 1
+                                                        except Exception as remove_error:
+                                                            st.warning(f"Could not remove placeholder text: {remove_error}")
+                                
+                                if text_removed > 0:
+                                    st.info(f"Removed {text_removed} placeholder text instances")
+                    
+                    # Save the final result
+                    final_output = io.BytesIO()
+                    pdf_document.save(final_output)
+                    pdf_document.close()
+                    
                     replacements_made = form_fields_filled
-                    st.success(f"✅ Successfully filled {form_fields_filled} form fields using proper PDF form filling!")
-                    return form_output.getvalue(), replacements_made
+                    st.success(f"✅ Successfully filled {form_fields_filled} form fields and cleaned up placeholders!")
+                    return final_output.getvalue(), replacements_made
                 else:
                     st.warning("⚠️ No form fields matched your data. Will try text-based replacement as fallback.")
         
@@ -598,7 +641,10 @@ def fill_pdf_with_data(pdf_file, data):
                                             rect = fitz.Rect(span["bbox"])
                                             font_size = span.get("size", 12)
                                             
-                                            # More gentle approach: just overlay the text without white box
+                                            # Remove original text first
+                                            page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1))
+                                            
+                                            # Add replacement text
                                             page.insert_text(
                                                 rect.top_left,
                                                 modified_text,
@@ -862,10 +908,59 @@ def main():
                         st.markdown("### 📋 Step 3: Copy Prompt to AI")
                         st.info("Copy this prompt and paste it into your preferred AI assistant.")
                         
-                        with st.expander("📄 Click to view the generated AI Prompt", expanded=True):
+                        with st.expander("📄 Click to view the generated AI Prompt", expanded=False):
                             st.code(st.session_state.ai_prompt, language="text")
                         
-                        copy_component("📋 Copy Prompt to Clipboard", st.session_state.ai_prompt)
+                        # Add copy button with notification
+                        if st.button("📋 Copy Prompt to Clipboard", key="copy_prompt_btn"):
+                            # Use JavaScript to copy to clipboard and show notification
+                            st.components.v1.html(f"""
+                            <script>
+                            navigator.clipboard.writeText(`{st.session_state.ai_prompt.replace('`', '\\`')}`).then(function() {{
+                                // Create and show toast notification
+                                const toast = document.createElement('div');
+                                toast.innerHTML = '✅ Prompt copied to clipboard';
+                                toast.style.cssText = `
+                                    position: fixed;
+                                    top: 20px;
+                                    right: 20px;
+                                    background: #4CAF50;
+                                    color: white;
+                                    padding: 10px 15px;
+                                    border-radius: 5px;
+                                    font-size: 14px;
+                                    z-index: 9999;
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                                    animation: slideIn 0.3s ease-in-out;
+                                `;
+                                
+                                // Add CSS animation
+                                const style = document.createElement('style');
+                                style.innerHTML = `
+                                    @keyframes slideIn {{
+                                        from {{ transform: translateX(100%); opacity: 0; }}
+                                        to {{ transform: translateX(0); opacity: 1; }}
+                                    }}
+                                    @keyframes slideOut {{
+                                        from {{ transform: translateX(0); opacity: 1; }}
+                                        to {{ transform: translateX(100%); opacity: 0; }}
+                                    }}
+                                `;
+                                document.head.appendChild(style);
+                                document.body.appendChild(toast);
+                                
+                                // Remove toast after 3 seconds
+                                setTimeout(() => {{
+                                    toast.style.animation = 'slideOut 0.3s ease-in-out';
+                                    setTimeout(() => {{
+                                        document.body.removeChild(toast);
+                                    }}, 300);
+                                }}, 3000);
+                            }}).catch(function(err) {{
+                                console.error('Could not copy text: ', err);
+                            }});
+                            </script>
+                            """, height=0)
 
                         st.markdown("**Quick Link to AI Service:**")
                         st.markdown(f'<a href="https://niprgpt.mil/" target="_blank" class="ai-button nipr-btn">🚀 Open NiprGPT</a>', unsafe_allow_html=True)
