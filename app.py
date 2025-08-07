@@ -374,8 +374,8 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
     
     if source_file is not None:
-    filename = source_file.name if hasattr(source_file, 'name') else os.path.basename(source_file)
-    file_extension = filename.split('.')[-1].lower()
+        filename = source_file.name if hasattr(source_file, 'name') else os.path.basename(source_file)
+        file_extension = filename.split('.')[-1].lower()
     
     if file_extension not in ['pptx', 'docx']:
         st.error("Unsupported file type. Please upload a .pptx or .docx file.")
@@ -577,6 +577,7 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Application error: {e}")
         st.info("Please refresh the page and try again. If the problem persists, check your template file format.")
+
 
 
 
