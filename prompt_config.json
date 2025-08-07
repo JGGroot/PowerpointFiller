@@ -1,6 +1,6 @@
 {
   "template_prompts": {
-    "quarterly_report.pptx": "Focus on financial data and quarterly metrics. Extract budget figures, revenue data, and performance indicators. {field_list} {project_data}",
+    "MFR Template.docx": "This is a test {field_list} {project_data}",
     "military_brief.pptx": "Military briefing focus. Extract mission data, personnel info, and operational details. {field_list} {project_data}"
   }
 }
