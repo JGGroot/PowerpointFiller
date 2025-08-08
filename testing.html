@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USAF File Forge</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :root {
+    /* Deep purple color scheme */
+    --primary: #7c3aed;
+    --primary-dark: #6d28d9;
+    --secondary: #a855f7;
+    --success: #10b981;
+    --error: #ef4444;
+    --bg-dark: #1a0033;
+    --bg-light: #2d1b69;
+    --card-bg: #2d1b69;
+    --text-primary: #f1f5f9;
+    --text-secondary: #c4b5fd;
+    --border: #4c1d95;
+    --accent: #e9d5ff;
+    --warning-yellow: #fbbf24;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, var(--bg-dark) 0%, #2d1b69 100%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* Warning Banner */
+  .warning-banner {
+    background: var(--warning-yellow);
+    color: #000;
+    text-align: center;
+    padding: 6px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Header */
+  header {
+    background: rgba(45, 27, 105, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 0;
+    position: sticky;
+    top: 6px; /* Account for warning banner */
+    z-index: 100;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    margin-top: 10px; /* Push down for warning banner */
+  }
+
+  .header-content {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  /* Main layout - limited to 1080px */
+  main {
+    max-width: 1080px;
+    margin: 3rem auto;
+    padding: 0 2rem 3rem;
+  }
+
+  /* Cards */
+  .card {
+    background: rgba(45, 27, 105, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(124, 58, 237, 0.2);
+  }
+
+  .card h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-primary);
+  }
+
+  .step-badge {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    border-radius:30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+  }
+
+  .card p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+  }
+
+  /* File input */
+  .file-input-wrapper {
+    position: relative;
+    overflow: hidden;
+  }
+
+  input[type="file"] {
+    display: block;
+    padding: 1rem;
+    width: 30%;
+    background: rgba(124, 58, 237, 0.1);
+    border: 2px dashed rgba(124, 58, 237, 0.5);
+    border-radius: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  input[type="file"]:hover {
+    background: rgba(124, 58, 237, 0.2);
+    border-color: var(--primary);
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 0.875rem 2rem;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 30px rgba(124, 58, 237, 0.4);
+  }
+
+  .btn-secondary {
+    background: rgba(196, 181, 253, 0.1);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(196, 181, 253, 0.2);
+  }
+
+  .btn-restart {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    color: white;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+  }
+
+  .btn-restart:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 30px rgba(239, 68, 68, 0.4);
+  }
+
+  .btn:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    background: rgba(26, 0, 51, 0.5);
+    padding: 0.25rem;
+    border-radius: 12px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .tab:hover {
+    color: var(--text-primary);
+  }
+
+  .tab.active {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+  }
+
+  .tab-content {
+    display: none;
+  }
+
+  .tab-content.active {
+    display: block;
+  }
+
+  /* Textareas and inputs */
+  textarea, input[type="text"] {
+    width: 100%;
+    padding: 1rem;
+    background: rgba(26, 0, 51, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    resize: vertical;
+  }
+
+  textarea:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: rgba(26, 0, 51, 0.8);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  }
+
+  .input-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .input-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* Code blocks */
+  pre {
+    background: rgba(26, 0, 51, 0.8);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--accent);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* Progress bar */
+  .progress {
+    display: none;
+    margin: 1.5rem 0;
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: rgba(26, 0, 51, 0.5);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  /* Alerts */
+  .alert {
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    margin: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .alert-success {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--success);
+  }
+
+  .alert-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--error);
+  }
+
+  .alert-info {
+    background: rgba(124, 58, 237, 0.1);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    color: var(--primary);
+  }
+
+  /* Manual fields */
+  .manual-fields {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+
+  .manual-field {
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    background: rgba(26, 0, 51, 0.3);
+    border-radius: 12px;
+  }
+
+  .manual-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .manual-field input {
+    width: 100%;
+    padding: 0.75rem;
+    background: rgba(26, 0, 51, 0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+
+  /* Button group */
+  .btn-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  /* Debug panel */
+  .debug-panel {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid var(--success);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-top: 2rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--success);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .debug-line {
+    margin: 0.25rem 0;
+    opacity: 0.8;
+  }
+
+  /* Restart button container */
+  .restart-container {
+    text-align: center;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    main {
+      padding: 0 1rem 2rem;
+    }
+    
+    .card {
+      padding: 1.5rem;
+    }
+    
+    .btn-group {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+<!-- Warning Banner -->
+<div class="warning-banner">
+  THIS TOOL IS IN BETA TESTING - DO NOT INPUT CUI OR PII INTO THIS SYSTEM
+</div>
+
+<header>
+  <div class="header-content">
+    <h1>🛠️ USAF File Forge - A Royal Spark Initiative</h1>
+    <div class="subtitle">Rapid Document Automation Leveraging Artificial Intelligence</div>
+  </div>
+</header>
+
+<main>
+  <!-- Step 1: Upload -->
+  <div class="card">
+    <h2><span class="step-badge">1</span>Upload Document Template</h2>
+    <p>Select a Word document (.docx) or PowerPoint presentation (.pptx) containing the correctly formatted template.</p>
+    <div class="file-input-wrapper">
+      <input type="file" id="templateFile" accept=".docx,.pptx" onchange="handleFileChange(event)">
+    </div>
+    <div id="fileInfo"></div>
+  </div>
+
+  <!-- Step 2: Extract -->
+  <div class="card">
+    <h2><span class="step-badge">2</span>Extract & Configure Placeholders</h2>
+    <p>Placeholders are automatically extracted when you upload a document. You can also re-scan manually.</p>
+    <button onclick="extractPlaceholders()" id="extractBtn" class="btn btn-primary" disabled>
+      🔍 Extract Placeholders
+    </button>
+    <div class="progress" id="extractProgress">
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+    <div id="placeholdersOutput"></div>
+    
+    <!-- Tabs for AI vs Manual -->
+    <div id="tabsContainer" style="display: none; margin-top: 2rem;">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('ai', this)">🤖 AI Generation</button>
+        <button class="tab" onclick="switchTab('manual', this)">✏️ Manual Entry</button>
+      </div>
+      
+      <!-- AI Generation Tab -->
+      <div id="aiTab" class="tab-content active">
+        <div class="input-group">
+          <label class="input-label">Additional Context for AI (Optional)</label>
+          <textarea id="aiContext" rows="4" placeholder="Add any context or instructions for the AI..."></textarea>
+        </div>
+        
+        <div class="btn-group">
+          <button onclick="generateAIPrompt()" class="btn btn-primary">🎯 Generate AI Prompt</button>
+        </div>
+        
+        <pre id="aiPromptOutput" style="display: none; margin-top: 1.5rem;"></pre>
+        
+        <div class="input-group" style="margin-top: 2rem;">
+        	<button onclick="copyPrompt()" id="copyPromptBtn" class="btn btn-secondary" disabled>📋 Copy Prompt</button>
+          <label class="input-label">Paste AI Response (JSON)</label>
+          <textarea id="jsonDataInput" rows="10" placeholder='Paste JSON here...'></textarea>
+        </div>
+        
+        <button onclick="fillTemplateFromAI()" class="btn btn-primary">✨ Fill Template & Download</button>
+      </div>
+      
+      <!-- Manual Entry Tab -->
+      <div id="manualTab" class="tab-content">
+        <div id="manualFields" class="manual-fields"></div>
+        <button onclick="fillTemplateFromManual()" class="btn btn-primary">✨ Generate Document</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress" id="fillProgress">
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+  </div>
+
+  <!-- Debug Panel -->
+  <div class="debug-panel" id="debugPanel">
+    <div>🐛 Debug Output:</div>
+    <div id="debugOutput"></div>
+  </div>
+
+  <!-- Restart Button -->
+  <div class="restart-container">
+    <button onclick="restartTool()" class="btn btn-restart">
+      🔄 Restart Tool
+    </button>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+// Global variables
+let fileBuffer = null;
+let fileType = null;
+let fileName = null;
+let placeholders = [];
+
+// Debug function
+function debug(msg) {
+  console.log(msg);
+  const output = document.getElementById('debugOutput');
+  if (output) {
+    const time = new Date().toLocaleTimeString();
+    output.innerHTML += `<div class="debug-line">[${time}] ${msg}</div>`;
+    output.scrollTop = output.scrollHeight;
+  }
+}
+
+// Initialize
+window.onload = function() {
+  debug('Page loaded successfully');
+  debug('JSZip available: ' + (typeof JSZip !== 'undefined'));
+  debug('FileSaver available: ' + (typeof saveAs !== 'undefined'));
+}
+
+// Reset UI function
+function resetUI() {
+  // Clear file info
+  document.getElementById('fileInfo').innerHTML = '';
+  
+  // Reset extract button
+  const extractBtn = document.getElementById('extractBtn');
+  extractBtn.disabled = true;
+  extractBtn.textContent = '🔍 Extract Placeholders';
+  
+  // Clear placeholders output
+  document.getElementById('placeholdersOutput').innerHTML = '';
+  
+  // Hide tabs container
+  document.getElementById('tabsContainer').style.display = 'none';
+  
+  // Clear AI context and output
+  document.getElementById('aiContext').value = '';
+  document.getElementById('aiPromptOutput').textContent = '';
+  document.getElementById('aiPromptOutput').style.display = 'none';
+  document.getElementById('jsonDataInput').value = '';
+  document.getElementById('copyPromptBtn').disabled = true;
+  
+  // Clear manual fields
+  document.getElementById('manualFields').innerHTML = '';
+  
+  // Hide progress bars
+  document.getElementById('extractProgress').style.display = 'none';
+  document.getElementById('fillProgress').style.display = 'none';
+  
+  // Reset global variables
+  placeholders = [];
+  
+  debug('UI reset completed');
+}
+
+// Restart tool function
+function restartTool() {
+  if (confirm('Are you sure you want to restart? This will clear all current data.')) {
+    // Reset file input
+    document.getElementById('templateFile').value = '';
+    
+    // Reset all variables
+    fileBuffer = null;
+    fileType = null;
+    fileName = null;
+    placeholders = [];
+    
+    // Reset UI
+    resetUI();
+    
+    // Clear debug output
+    document.getElementById('debugOutput').innerHTML = '';
+    
+    debug('Tool restarted');
+  }
+}
+
+// Handle file upload - called directly from onchange
+function handleFileChange(event) {
+  debug('File input changed');
+  
+  const file = event.target.files[0];
+  
+  if (!file) {
+    debug('No file selected');
+    return;
+  }
+  
+  // Reset UI when new file is uploaded (but after checking file exists)
+  resetUI();
+  
+  debug('File selected: ' + file.name + ' (' + file.size + ' bytes)');
+  
+  fileName = file.name;
+  const lowerName = fileName.toLowerCase();
+  
+  if (lowerName.endsWith('.docx')) {
+    fileType = 'docx';
+  } else if (lowerName.endsWith('.pptx')) {
+    fileType = 'pptx';
+  } else {
+    fileType = null;
+  }
+  
+  debug('File type: ' + fileType);
+  
+  const fileInfo = document.getElementById('fileInfo');
+  const extractBtn = document.getElementById('extractBtn');
+  
+  if (!fileType) {
+    fileInfo.innerHTML = '<div class="alert alert-error">❌ Please upload a .docx or .pptx file</div>';
+    extractBtn.disabled = true;
+    debug('Invalid file type');
+    return;
+  }
+  
+  // Read file
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    fileBuffer = e.target.result;
+    const sizeKB = (file.size / 1024).toFixed(1);
+    fileInfo.innerHTML = `<div class="alert alert-success">✅ ${fileName} loaded (${sizeKB} KB)</div>`;
+    extractBtn.disabled = false;
+    debug('File loaded successfully, buffer size: ' + fileBuffer.byteLength);
+    
+    // Auto-extract placeholders after successful file load
+    setTimeout(() => {
+        extractPlaceholders();
+    }, 100);
+};
+  
+  reader.onerror = function(e) {
+    debug('Error reading file: ' + e);
+    fileInfo.innerHTML = '<div class="alert alert-error">❌ Error reading file</div>';
+    extractBtn.disabled = true;
+  };
+  
+  reader.readAsArrayBuffer(file);
+}
+
+// Extract placeholders
+async function extractPlaceholders() {
+  debug('Extract button clicked');
+  
+  if (!fileBuffer) {
+    alert('Please upload a document first');
+    return;
+  }
+  
+  const progress = document.getElementById('extractProgress');
+  const progressFill = progress.querySelector('.progress-fill');
+  const output = document.getElementById('placeholdersOutput');
+  const btn = document.getElementById('extractBtn');
+  
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  progress.style.display = 'block';
+  progressFill.style.width = '30%';
+  
+  try {
+    debug('Loading ZIP file...');
+    const zip = await JSZip.loadAsync(fileBuffer);
+    debug('ZIP loaded');
+    progressFill.style.width = '60%';
+    
+    placeholders = [];
+    const foundSet = new Set();
+    
+    if (fileType === 'docx') {
+      const content = await zip.file('word/document.xml').async('string');
+      // Simple regex to find placeholders
+      const matches = content.match(/\{\{[^}]+\}\}/g) || [];
+      matches.forEach(match => {
+        const clean = match.replace(/\{\{|\}\}/g, '').trim();
+        if (clean) foundSet.add(clean);
+      });
+    } else if (fileType === 'pptx') {
+      const slideFiles = Object.keys(zip.files).filter(name => 
+        name.startsWith('ppt/slides/slide') && name.endsWith('.xml')
+      );
+      
+      for (const slideFile of slideFiles) {
+        const content = await zip.file(slideFile).async('string');
+        const matches = content.match(/\{\{[^}]+\}\}/g) || [];
+        matches.forEach(match => {
+          const clean = match.replace(/\{\{|\}\}/g, '').trim();
+          if (clean) foundSet.add(clean);
+        });
+      }
+    }
+    
+    placeholders = Array.from(foundSet);
+    progressFill.style.width = '100%';
+    
+    debug('Found ' + placeholders.length + ' placeholders: ' + placeholders.join(', '));
+    
+    if (placeholders.length === 0) {
+      output.innerHTML = '<div class="alert alert-error">No {{placeholder}} markers found</div>';
+      document.getElementById('tabsContainer').style.display = 'none';
+    } else {
+      output.innerHTML = `<div class="alert alert-success">✅ Found ${placeholders.length} placeholders</div>`;
+      document.getElementById('tabsContainer').style.display = 'block';
+      setupManualFields();
+    }
+    
+    setTimeout(() => {
+      progress.style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '🔍 Extract Placeholders';
+    }, 500);
+    
+  } catch (error) {
+    debug('Error: ' + error.message);
+    console.error(error);
+    progress.style.display = 'none';
+    output.innerHTML = '<div class="alert alert-error">❌ Error: ' + error.message + '</div>';
+    btn.disabled = false;
+    btn.textContent = '🔍 Extract Placeholders';
+  }
+}
+
+// Setup manual fields
+function setupManualFields() {
+  const container = document.getElementById('manualFields');
+  container.innerHTML = '';
+  
+  placeholders.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'manual-field';
+    div.innerHTML = `
+      <label>${p}</label>
+      <input type="text" id="manual_${p}" placeholder="Enter value for ${p}">
+    `;
+    container.appendChild(div);
+  });
+  
+  debug('Manual fields created');
+}
+
+// Switch tabs
+function switchTab(tab, button) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  button.classList.add('active');
+  
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(tab + 'Tab').classList.add('active');
+  
+  debug('Switched to ' + tab + ' tab');
+}
+
+// Generate AI prompt
+function generateAIPrompt() {
+  if (placeholders.length === 0) {
+    alert('Please extract placeholders first');
+    return;
+  }
+  
+  const context = document.getElementById('aiContext').value || 'Generate professional content';
+  
+  const prompt = `Please fill these placeholders with appropriate content. ${context}
+
+Placeholders to fill:
+${placeholders.map(p => '- ' + p).join('\n')}
+
+Return as JSON:
+{
+${placeholders.map(p => `  "${p}": "your content here"`).join(',\n')}
+}`;
+  
+  document.getElementById('aiPromptOutput').textContent = prompt;
+  document.getElementById('aiPromptOutput').style.display = 'block';
+  document.getElementById('copyPromptBtn').disabled = false;
+  
+  debug('AI prompt generated');
+}
+
+// Copy prompt
+async function copyPrompt() {
+  const text = document.getElementById('aiPromptOutput').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyPromptBtn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy Prompt';
+    }, 2000);
+    debug('Prompt copied to clipboard');
+  } catch (err) {
+    alert('Failed to copy');
+    debug('Copy failed: ' + err);
+  }
+}
+
+// Fill from AI
+async function fillTemplateFromAI() {
+  const jsonText = document.getElementById('jsonDataInput').value;
+  if (!jsonText) {
+    alert('Please paste JSON data');
+    return;
+  }
+  
+  try {
+    const data = JSON.parse(jsonText);
+    await fillTemplate(data);
+  } catch (error) {
+    alert('Invalid JSON: ' + error.message);
+    debug('JSON parse error: ' + error);
+  }
+}
+
+// Fill from manual
+async function fillTemplateFromManual() {
+  const data = {};
+  placeholders.forEach(p => {
+    const input = document.getElementById('manual_' + p);
+    data[p] = input ? input.value : '';
+  });
+  
+  await fillTemplate(data);
+}
+
+// Fill template
+async function fillTemplate(data) {
+  if (!fileBuffer) {
+    alert('No file loaded');
+    return;
+  }
+  
+  debug('Filling template with: ' + JSON.stringify(data));
+  
+  const progress = document.getElementById('fillProgress');
+  const progressFill = progress.querySelector('.progress-fill');
+  
+  progress.style.display = 'block';
+  progressFill.style.width = '30%';
+  
+  try {
+    const zip = await JSZip.loadAsync(fileBuffer);
+    progressFill.style.width = '60%';
+    
+    if (fileType === 'docx') {
+      let xml = await zip.file('word/document.xml').async('string');
+      
+      for (const [key, value] of Object.entries(data)) {
+        const regex = new RegExp('\\{\\{\\s*' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\}\\}', 'g');
+        xml = xml.replace(regex, value || '');
+      }
+      
+      zip.file('word/document.xml', xml);
+      
+   } else if (fileType === 'pptx') {
+      const slideFiles = Object.keys(zip.files).filter(name => 
+        name.startsWith('ppt/slides/slide') && name.endsWith('.xml')
+      );
+      
+      for (const slideFile of slideFiles) {
+        let xml = await zip.file(slideFile).async('string');
+        
+        for (const [key, value] of Object.entries(data)) {
+          const regex = new RegExp('\\{\\{\\s*' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\}\\}', 'g');
+          xml = xml.replace(regex, value || '');
+        }
+        
+        zip.file(slideFile, xml);
+      }
+    }
+    
+    progressFill.style.width = '90%';
+    
+    const blob = await zip.generateAsync({type: 'blob'});
+    const outputName = fileName.replace(/\.(docx|pptx)$/, '_filled.$1');
+    saveAs(blob, outputName);
+    
+    progressFill.style.width = '100%';
+    debug('Document saved: ' + outputName);
+    
+    setTimeout(() => {
+      progress.style.display = 'none';
+    }, 1000);
+    
+  } catch (error) {
+    debug('Fill error: ' + error);
+    console.error(error);
+    progress.style.display = 'none';
+    alert('Error: ' + error.message);
+  }
+}
+</script>
+</body>
+</html>
